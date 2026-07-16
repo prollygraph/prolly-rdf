@@ -1,0 +1,508 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- prolly-rdf4j: the Eclipse RDF4J Sail (ProllySail) — the project's sole RDF
+       implementation as of ADR-0037. Dictionary-encoded TermId keys, CommitLog /
+       RootMetaTree versioning, four maintained permutation indexes, conformance
+       ratchet. The native raw-IRI engine + the Jena adapter were retired once
+       prolly-bom + prolly-urdna2015 moved onto this Sail. -->
+
+  <parent>
+    <groupId>io.github.prollygraph</groupId>
+    <artifactId>prolly-rdf-parent</artifactId>
+    <version>0.2.0-BETA</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <groupId>io.github.prollygraph</groupId>
+  <artifactId>prolly-rdf4j</artifactId>
+  <packaging>jar</packaging>
+  <name>Prolly Tree — Eclipse RDF4J Adapter</name>
+  <description>
+    Eclipse RDF4J Sail (ProllySail) backed by prolly-rdf's VersionedQuadStore —
+    the project's sole RDF implementation (ADR-0037): dictionary-encoded terms,
+    commit-DAG versioning (branches, tags, merge, sync), four maintained
+    permutation indexes, and worst-case-optimal triejoin routing for cyclic
+    basic graph patterns (ADR-0065).
+  </description>
+
+  <properties>
+    <!-- NullAway GATE (null-safety-rollout, Step 4 — the versioned Sail). Under -Perrorprone,
+         NullAway checks these packages at ERROR, so a new null-unsafe deref fails rdf4j's compile.
+         Overrides the parent MAIN defaults (nullaway.packages=__none__, nullaway.severity=WARN). Scope
+         is com.dolthub.prolly (port-core) + com.earasoft.prolly (codec + this module's own
+         com.earasoft.prolly.rdf4j) so the gate RESPECTS the @Nullable contracts of the annotated
+         upstreams across the dependency boundary (rollout D-4; the two annotation roots share no prefix).
+         prolly-platform is also under com.earasoft.prolly but is not yet annotated — NullAway treats an
+         unannotated upstream as @NonNull-by-default either way, so no platform finding is produced (the
+         warner confirms 0 platform-boundary findings). The @Nullable vs Objects.requireNonNull discipline
+         is documented in prolly-port-core/src/main/java/com/dolthub/prolly/package-info.java. -->
+    <nullaway.packages>com.dolthub.prolly,com.earasoft.prolly</nullaway.packages>
+    <nullaway.severity>ERROR</nullaway.severity>
+  </properties>
+
+  <!-- rdf4j.version + slf4j.version consolidated into the prolly-dependencies
+       BOM (rdf4j-bom import + managed slf4j-nop). jmh.version stays in
+       prolly-parent (annotation-processor path, per ADR-0042 D-6). -->
+  <dependencies>
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-sync</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- jspecify @Nullable for the NullAway gate (plans/null-safety-rollout.md, Step 4).
+         Compile-scoped, BOM-managed; CLASS-retention (compile-only). -->
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-rdf</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <!-- prolly-platform is deliberately ABSENT: the dependency was inverted 2026-07-16
+         (platform -> rdf4j). The Sail-specific multitenant subset (PerRepoSail,
+         PerRepoProllySailFactory, RepoSailRegistry, hosts) moved to prolly-platform's
+         com.earasoft.prolly.platform.multitenant.sail — the Sail stays product-free,
+         which is what makes this module extractable to the public RDF ring. -->
+
+    <!-- Shared term/key codecs, extracted from this module — see prolly-codec. -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-codec</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <!-- Use-after-free poison harness (PoisoningBufferPool + ArenaScopeProbe + HeapBufferPool),
+         shared from prolly-port-core's test-jar — plans/off-heap-use-after-free-tests.md D-5.
+         Consumed by the Step-14 index UAF differentials (QuadIndex / SpocIndex / ProvenanceIndex
+         take the BufferPool interface, so they are poison-testable, unlike the rdf query layer).
+         port-core is otherwise transitive (via prolly-rdf / prolly-codec); this pulls only its
+         test-jar onto the test classpath. -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>dolthub-java-port</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <!-- The engine's RocksDB substrate: ALREADY on the main classpath transitively (the
+         evaluation strategy uses its pool package; the examples use RocksNodeStore) —
+         declared direct + compile here because a test-scoped direct declaration would
+         DEMOTE the transitive compile dep (Maven nearest-wins) and break main compile
+         (caught 2026-07-16 adding SailGcReachabilityTest, which also uses it: the
+         engine Database + GarbageCollector for the ADR-0074 positive twin). -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-storage</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <!-- Caffeine: bounds the per-transaction term-encode memo (termCacheTx) as an
+         access-order LRU. The last unbounded write-path heap wall — a single un-batched
+         load of millions of distinct terms grew the memo without limit. Eviction is safe
+         because Dictionary.encode is deterministic (re-encode of an inserted term returns
+         the same id). Version managed in the root pom. -->
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
+    </dependency>
+
+    <!-- Micrometer: the metrics framework (ADR-0041). The Sail instruments against
+         MeterRegistry directly; version managed by the Spring Boot BOM imported in the
+         root pom. NOT added to prolly-codec — the dependency line is held at the
+         codec's tiny EncoderMetrics seam (ADR-0041 D-1). -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-core</artifactId>
+    </dependency>
+
+    <!-- Sail SPI we extend; pulls in rdf4j-model + rdf4j-common transitively. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-sail-api</artifactId>    </dependency>
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-sail-base</artifactId>    </dependency>
+    <!-- Repository API + SailRepository so tests can issue SPARQL via the
+         standard RDF4J entry points. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-repository-api</artifactId>    </dependency>
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-repository-sail</artifactId>    </dependency>
+    <!-- SPARQL parser + evaluation; pulled by sail-base too but listed
+         explicitly for clarity. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-queryparser-sparql</artifactId>    </dependency>
+
+    <!-- MemoryStore as the in-memory working layer for the hybrid v1 Sail. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-sail-memory</artifactId>    </dependency>
+    <!-- RIO Turtle is pulled in transitively but worth listing explicitly:
+         the test path constructs IRIs / Literals via SimpleValueFactory. -->
+
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-nop</artifactId>      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+    </dependency>
+    <!-- jqwik property-based testing (prolly-rdf4j-test-strategy D-3 / Phase 0;
+         version managed in the root pom, as in prolly-port-core / prolly-codec /
+         prolly-rdf). The differential-oracle + RDF-value generators (S-2/S-3)
+         are built on it. Smoke: JqwikSmokeProperty. -->
+    <dependency>
+      <groupId>net.jqwik</groupId>
+      <artifactId>jqwik</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Jazzer (coverage-guided fuzzing) for the untrusted-byte parse surfaces
+         in this module: RefsStore branch-name validation (path-traversal) and
+         CommitLog line parsing (torn/truncated disk lines). Same setup as
+         prolly-port-core (prolly-rdf test-strategy Step 33 / D-8): @FuzzTest
+         methods run fast REGRESSION replay of the seed corpus on every build;
+         active coverage-guided fuzzing is the -Pfuzz profile (JAZZER_FUZZ=1). -->
+    <dependency>
+      <groupId>com.code-intelligence</groupId>
+      <artifactId>jazzer-junit</artifactId>
+      <version>0.30.0</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- RDF4J's own NativeStore — used only as a baseline in
+         SailComparisonBenchmark (prolly-rdf4j vs the stock RDF4J disk store). -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-sail-nativerdf</artifactId>      <scope>test</scope>
+    </dependency>
+    <!-- RDF4J LmdbStore — a second mmap reference engine (LMDB B+tree) for the bench comparisons. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-sail-lmdb</artifactId>      <scope>test</scope>
+    </dependency>
+    <!-- RDF/XML parser — for the real-dataset NcitIngestBenchmark (ncit.owl is RDF/XML). -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-rio-rdfxml</artifactId>      <scope>test</scope>
+    </dependency>
+    <!-- The unversioned flat Sail — the third variant in SailComparisonBenchmark. -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-flatsail</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- JMH benchmarks live in this module's test sources
+         (com.earasoft.prolly.rdf4j.bench). Run them with the bench package's
+         JmhRunner main; see SailIngestBenchmark for details. -->
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-core</artifactId>
+      <version>${jmh.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-generator-annprocess</artifactId>
+      <version>${jmh.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- JMH's annotation processor generates the benchmark glue classes
+           at test-compile time. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>org.openjdk.jmh</groupId>
+              <artifactId>jmh-generator-annprocess</artifactId>
+              <version>${jmh.version}</version>
+            </path>
+          </annotationProcessorPaths>
+        </configuration>
+      </plugin>
+      <!-- Line/branch coverage (JaCoCo). prepare-agent publishes the agent
+           argLine into @{argLine}; surefire is overridden below to expand it
+           (the parent pom hard-codes a literal argLine that would otherwise
+           shadow the agent). Report: target/site/jacoco/. -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.14</version>
+        <configuration>
+          <!-- com.earasoft.prolly.rdf4j.examples.* are runnable usage demos,
+               not product code — exclude them from the coverage figure. -->
+          <excludes>
+            <exclude>**/examples/**</exclude>
+          </excludes>
+        </configuration>
+        <executions>
+          <execution>
+            <id>jacoco-prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>jacoco-report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <!-- Coverage floor (prolly-rdf4j-test-strategy Step 4 / D-8): thresholds
+               set BELOW the 2026-05-29 measured baseline (line 91.7%, instruction
+               89.6%, branch 77.4%, examples excluded) with headroom, so the gate
+               catches a real regression, not normal churn. Bound to `verify`
+               (CI / `mvn verify`), NOT the default `mvn test` — per the plan's
+               per-build-vs-nightly split. Will be ratcheted up as Phase 1-7 land. -->
+          <execution>
+            <id>jacoco-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit><counter>INSTRUCTION</counter><value>COVEREDRATIO</value><minimum>0.85</minimum></limit>
+                    <limit><counter>LINE</counter><value>COVEREDRATIO</value><minimum>0.85</minimum></limit>
+                    <limit><counter>BRANCH</counter><value>COVEREDRATIO</value><minimum>0.70</minimum></limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>@{argLine} --enable-native-access=ALL-UNNAMED -Djava.io.tmpdir=${project.build.directory}</argLine>
+          <!-- + **/*Property.java: run the jqwik property tests (run-dormant-property-tests, P1).
+               Surefire's default includes match only *Test/*Tests/*TestCase, so *Property-named
+               property tests would silently not run. -->
+          <includes>
+            <include>**/Test*.java</include>
+            <include>**/*Test.java</include>
+            <include>**/*Tests.java</include>
+            <include>**/*TestCase.java</include>
+            <include>**/*Property.java</include>
+          </includes>
+        </configuration>
+      </plugin>
+      <!-- Publish a test-jar so prolly-rdf4j-grpc (plan grpc-transport.md
+           Step 1) can reuse the ProllySail / sync test fixtures in its
+           end-to-end test (Step 10). Vanilla maven-jar-plugin test-jar goal;
+           no excludes since the test fixtures we need (initedSail,
+           commitTriple) live in package-private helpers. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>publish-test-jar</id>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Mutation testing — see prolly-port-core/pom.xml and memory
+           `mutation-testing`. Run explicitly, off the normal build:
+
+             mvn -pl prolly-rdf4j test-compile \
+                 org.pitest:pitest-maven:mutationCoverage
+
+           Scoped to this module's RDF value model (value/ — ProllyLiteral /
+           IRI / BNode / Triple / Statement), which carries the ~150-case Term*
+           suite: a tractable, high-signal mutation baseline (prolly-rdf4j-test-
+           strategy Step 4 / D-8). The term codec proper lives in prolly-codec;
+           mutating it from here is a no-op (not this module's classes, and
+           pitest-maven has no mutableCodePaths param to reach a dependency's
+           bytecode). prolly-codec has no pitest run of its own yet — that needs
+           its tests relocated there first. The -Psoak profile (below) widens to
+           this module's engine packages for the soak baseline.
+           Report: target/pit-reports/index.html. -->
+      <plugin>
+        <groupId>org.pitest</groupId>
+        <artifactId>pitest-maven</artifactId>
+        <!-- 1.25.4 (2026-06-09), bumped from 1.16.1 for Java 25. 1.16.1's shaded
+             ASM (relocated org.objectweb.asm -> org.pitest.reloc.asm) predates
+             class-file v69 and threw `Unsupported class file major version 69`
+             once the toolchain moved to Java 25 (2026-06-05) — the mutation gate
+             was dark from that date until this bump. Overriding org.ow2.asm on
+             the plugin classpath does NOT fix it (pitest uses its *shaded* copy);
+             the only fix is a pitest whose own bundle is v69-aware. 1.25.4's
+             parent pom pins asm.version=9.9.1, which defines V25=69 (verified).
+             prolly-rdf4j-test-strategy Step 30 / follow-ons Step 5. -->
+        <version>1.25.4</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-junit5-plugin</artifactId>
+            <!-- Stays 1.2.3: it declares pitest as `provided` (build-time target
+                 1.15.2), so at runtime it binds to the host pitest 1.25.4 above;
+                 the test-plugin SPI is stable across that range. -->
+            <version>1.2.3</version>
+          </dependency>
+          <!-- pitest-junit5-plugin pins junit-platform 1.9.2, binary-skewed
+               against this project's JUnit 6 — force the set to 6.0.3. -->
+          <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <version>6.0.3</version>
+          </dependency>
+          <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-engine</artifactId>
+            <version>6.0.3</version>
+          </dependency>
+          <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-commons</artifactId>
+            <version>6.0.3</version>
+          </dependency>
+          <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>6.0.3</version>
+          </dependency>
+          <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>6.0.3</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <jvmArgs>
+            <value>--enable-native-access=ALL-UNNAMED</value>
+          </jvmArgs>
+          <targetClasses>
+            <param>com.earasoft.prolly.rdf4j.value.*</param>
+          </targetClasses>
+          <targetTests>
+            <param>com.earasoft.prolly.rdf4j.value.*</param>
+          </targetTests>
+          <threads>4</threads>
+          <!-- Mutation floor (Step 4 / D-8): below the measured baseline
+               (value/ package: 209 mutations, 87% killed, 91% test strength)
+               with headroom. Mutation testing is run explicitly (not per-build);
+               this guards that run. Baseline first measured 2026-05-29; the gate
+               went dark 2026-06-05 when the Java 25 bump broke pitest 1.16.1, and
+               was restored 2026-06-11 by the pitest 1.25.4 bump — re-measured
+               identical (209/182/87%/91%), because the value/ code + tests are
+               unchanged so the score is deterministic. Kept at 80, not ratcheted:
+               the score is unchanged from baseline, so the original headroom
+               rationale still stands, and raising floors waits on the code
+               stabilizing (ADR-0056 Q1). Ratchet up as coverage of value/ tightens. -->
+          <mutationThreshold>80</mutationThreshold>
+          <outputFormats>
+            <param>HTML</param>
+            <param>XML</param>
+          </outputFormats>
+          <timestampedReports>false</timestampedReports>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!-- -Pfuzz: active coverage-guided Jazzer fuzzing of this module's
+       untrusted-byte parse surfaces (Step 33 / D-5). Sets JAZZER_FUZZ=1 so
+       @FuzzTest methods actively fuzz (per their maxDuration) instead of the
+       fast default regression-replay of the seed corpus, and scopes the run to
+       the fuzz tests. Kept out of the default `mvn test` (slow + JVM-fork-heavy):
+         mvn -pl prolly-rdf4j -Pfuzz test -Dtest=RefsStorePathTraversalFuzzTest -->
+  <profiles>
+    <profile>
+      <id>fuzz</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <environmentVariables>
+                <JAZZER_FUZZ>1</JAZZER_FUZZ>
+              </environmentVariables>
+              <includes>
+                <include>**/*FuzzTest.java</include>
+              </includes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!-- -Psoak: the wide mutation baseline for the GitLab `soak:mutation` job
+         (plans/model-based-testing-rollout.md Step 5). Widens beyond the fast value.* gate
+         to this module's engine packages (value/index/sail/term — SpocIndex, QuadIndex,
+         ProllySail, PrefixTable, ...) and drops the threshold (measure, don't gate — Step 5
+         pins thresholds afterward). Heavy — runs on the dedicated soak runner (tags:[soak]),
+         never the fast gate. Inherits version + the junit5-plugin dependency + the
+         jvmArgs from the always-on plugin above (enable-preview dropped in the Java 25 bump).
+
+         NOT covered here: the prolly-codec-resident classes (Dictionary, SpocKey, QuadOrder,
+         TermCodec — package com.earasoft.prolly.rdf4j.* but bytecode in the prolly-codec
+         module). pitest-maven exposed no usable `mutableCodePaths` configuration parameter
+         (verified against 1.16.1: it warned "unknown" and ignored it; whether the 1.25.4 bump
+         changes this is unverified — re-check before relying on it), so a dependency's bytecode
+         could not be mutated from here. Regardless of that param, these need prolly-codec's OWN
+         pitest + their tests moved there — a separate task. (Their tests currently live in this
+         module, which is why prolly-codec has no pitest yet; do not add a prolly-codec pitest
+         run without first relocating the tests.) -->
+    <profile>
+      <id>soak</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-maven</artifactId>
+            <configuration>
+              <targetClasses combine.self="override">
+                <param>com.earasoft.prolly.rdf4j.value.*</param>
+                <param>com.earasoft.prolly.rdf4j.index.*</param>
+                <param>com.earasoft.prolly.rdf4j.term.*</param>
+                <param>com.earasoft.prolly.rdf4j.sail.*</param>
+              </targetClasses>
+              <targetTests combine.self="override">
+                <param>com.earasoft.prolly.rdf4j.value.*</param>
+                <param>com.earasoft.prolly.rdf4j.index.*</param>
+                <param>com.earasoft.prolly.rdf4j.term.*</param>
+                <param>com.earasoft.prolly.rdf4j.sail.*</param>
+                <param>com.earasoft.prolly.rdf4j.gen.*</param>
+              </targetTests>
+              <mutationThreshold>0</mutationThreshold>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

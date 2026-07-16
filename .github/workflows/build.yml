@@ -1,0 +1,32 @@
+# Full gated build. MANUAL DISPATCH ONLY for now: the engine ring
+# (io.github.prollygraph core/storage/sync) is not yet on Maven Central, and this
+# private repo cannot read prollygraph/prolly-core without an owner-provisioned
+# secret. Two ways to activate, both owner decisions:
+#   (a) publish the engine ring to Central (prolly-core RELEASING.md "Maven Central"),
+#       then delete the prolly-core checkout/install steps below and enable `push`; or
+#   (b) add an ENGINE_RING_TOKEN repository secret (read access to prolly-core),
+#       then enable `push`.
+name: build
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out the engine ring (needs ENGINE_RING_TOKEN)
+        uses: actions/checkout@v4
+        with:
+          repository: prollygraph/prolly-core
+          token: ${{ secrets.ENGINE_RING_TOKEN }}
+          path: .engine-ring
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+      - name: Install the engine ring
+        run: mvn -q -B -DskipTests -f .engine-ring/pom.xml install
+      - name: Verify the ring (tests + spotless + license + convergence)
+        run: mvn -B verify

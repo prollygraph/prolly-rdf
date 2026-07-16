@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- prolly-rdf: Java-original work building on the Dolt port —
+       RocksDB-backed NodeStore, Database facade, JMX observability,
+       off-heap DirectBufferPool (Project Panama), RDF/SPARQL semantic
+       layer, sync simulation, JMH benchmarks. Depends on prolly-port-core;
+       the port never depends on this. -->
+
+  <parent>
+    <groupId>io.github.prollygraph</groupId>
+    <artifactId>prolly-rdf-parent</artifactId>
+    <version>0.2.0-BETA</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <groupId>io.github.prollygraph</groupId>
+  <artifactId>prolly-rdf</artifactId>
+  <packaging>jar</packaging>
+  <name>Prolly Tree — Versioned RDF engine</name>
+  <description>
+    Java RDF graph store built on top of the Dolt port: RocksDB-backed CAS,
+    Database facade with branching / merging / GC, off-heap buffer pool,
+    versioned quad store, sync. Consume this jar to get a turn-key versioned
+    RDF runtime on the JVM.
+  </description>
+
+  <properties>
+    <!-- NullAway GATE (null-safety-rollout, Step 2 — the RDF substrate: the SPOC index engine +
+         the worst-case-optimal LeapfrogTriejoin). Under -Perrorprone, NullAway checks these packages
+         at ERROR, so a new null-unsafe deref fails prolly-rdf's compile. Overrides the parent MAIN
+         defaults (nullaway.packages=__none__, nullaway.severity=WARN).
+
+         Scope is the full com.earasoft.prolly prefix PLUS com.dolthub.prolly so the gate RESPECTS the
+         @Nullable contracts of every annotated upstream — port-core (com.dolthub.prolly) AND storage +
+         codec (com.earasoft.prolly.*) — across the dependency boundary (rollout D-4; the two annotation
+         roots share no prefix). The full prefix also covers com.earasoft.prolly.demo (the runnable
+         walkthroughs): unlike the JaCoCo/pitest metric gates — which exclude demos so usage examples
+         don't dilute a coverage figure — null-safety has no such reason to exclude them. The demos ship
+         in the jar and hit the SAME port-core @Nullable boundary (getField / getRootValueHash) as the
+         engine, so gating them makes them correct examples (a newcomer reads a demo; an unguarded
+         @Nullable deref is the wrong thing to model). The parent -Xplugin template has no
+         UnannotatedSubPackages knob, so excluding demos would mean repo-wide pom machinery — out of
+         proportion to 18 mechanical findings. The @Nullable vs Objects.requireNonNull discipline is
+         documented in prolly-port-core/src/main/java/com/dolthub/prolly/package-info.java. -->
+    <nullaway.packages>com.dolthub.prolly,com.earasoft.prolly</nullaway.packages>
+    <nullaway.severity>ERROR</nullaway.severity>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>dolthub-java-port</artifactId>
+    </dependency>
+
+    <!-- prolly-storage: the RDF-free versioned-store substrate (Database,
+         storage/ RocksNodeStore + RocksManifest, pool/ DirectBufferPool,
+         monitor/, sync/, GarbageCollector, the integrity / error-injecting
+         node stores, VCUtils) moved here from prolly-rdf 2026-06-11 per
+         ADR-0060 — so the ~12 substrate-only consumers no longer inherit
+         this module's RDF query engine. Also holds SharedRocksDb (the
+         direction-neutral leaf the platform consumes, extracted 2026-05-27).
+         prolly-rdf keeps only the RDF layer (rdf/, semantic/, indexing/) and
+         depends DOWN on the substrate. -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-storage</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <!-- The shared term/key codec + Dictionary (ADR-0036): the engine encodes
+         pattern constants to TermIds for filtering/seeking, so prolly-rdf and the
+         RDF4J Sail share one encoding. Pulls rdf4j-model transitively (TermEncoder
+         takes an RDF4J Value) — model only, not the Sail. -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-codec</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <!-- jspecify @Nullable for the NullAway gate (plans/null-safety-rollout.md, Step 2).
+         Compile-scoped, BOM-managed; CLASS-retention (compile-only). -->
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.rocksdb</groupId>
+      <artifactId>rocksdbjni</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+    </dependency>
+    <!-- jqwik property-based testing (prolly-rdf-test-strategy D-1; version
+         managed in the root pom, as in prolly-port-core / prolly-codec).
+         Verified on JUnit Platform 6.0.x with the enable-preview surefire
+         argLine by RdfGeneratorsSmokeTest. -->
+    <dependency>
+      <groupId>net.jqwik</groupId>
+      <artifactId>jqwik</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- JMH benchmarks live in this module's test sources. -->
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-generator-annprocess</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>org.openjdk.jmh</groupId>
+              <artifactId>jmh-generator-annprocess</artifactId>
+              <version>${jmh.version}</version>
+            </path>
+          </annotationProcessorPaths>
+        </configuration>
+      </plugin>
+      <!-- Line/branch coverage (JaCoCo). prepare-agent publishes the agent
+           argLine into @{argLine}; surefire is overridden below to expand it
+           (the parent pom hard-codes a literal argLine that would otherwise
+           shadow the agent). Report: target/site/jacoco/. -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.14</version>
+        <configuration>
+          <!-- The com.earasoft.prolly.demo.* classes are runnable usage
+               examples (main-method walkthroughs), not product code — exclude
+               them so the coverage figure reflects the testable surface. -->
+          <excludes>
+            <exclude>**/demo/**</exclude>
+          </excludes>
+          <!-- Coverage gate (Step 32 / D-8): thresholds pinned JUST BELOW the
+               measured 2026-05-29 baseline (line 97.1%, branch 86.1%, instr
+               96.2% over the full prolly-rdf suite), so the gate catches the
+               next regression without failing on day one. Bound to `verify`
+               (below) — the default `mvn test` stays fast; CI / `mvn verify`
+               enforces. Re-measure + ratchet up as branch coverage improves. -->
+          <rules>
+            <rule>
+              <element>BUNDLE</element>
+              <limits>
+                <limit><counter>LINE</counter><value>COVEREDRATIO</value><minimum>0.95</minimum></limit>
+                <limit><counter>BRANCH</counter><value>COVEREDRATIO</value><minimum>0.83</minimum></limit>
+                <limit><counter>INSTRUCTION</counter><value>COVEREDRATIO</value><minimum>0.94</minimum></limit>
+              </limits>
+            </rule>
+          </rules>
+        </configuration>
+        <executions>
+          <execution>
+            <id>jacoco-prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>jacoco-report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <!-- Coverage gate: fails `mvn verify` if coverage drops below the
+               pinned baseline. Off the default `mvn test` (test < verify). -->
+          <execution>
+            <id>jacoco-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>@{argLine} --enable-native-access=ALL-UNNAMED -Djava.io.tmpdir=${project.build.directory}</argLine>
+          <!-- + **/*Property.java: run the jqwik property tests (run-dormant-property-tests, P1).
+               Surefire's default includes match only *Test/*Tests/*TestCase, so *Property-named
+               property tests would silently not run. -->
+          <includes>
+            <include>**/Test*.java</include>
+            <include>**/*Test.java</include>
+            <include>**/*Tests.java</include>
+            <include>**/*TestCase.java</include>
+            <include>**/*Property.java</include>
+          </includes>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!-- -Pmutation: PIT mutation testing for prolly-rdf (Step 31 / D-8). Kept in
+       a profile so it is NEVER part of the default `mvn test` — full-module PIT
+       here is multi-hour (RocksDB + the property/DST suites), so this is a
+       CI/background job:
+         mvn -o -pl prolly-rdf -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage
+       Scope down while iterating, e.g. -DtargetClasses=com.earasoft.prolly.indexing.*
+       Report: target/pit-reports/index.html. No build-failing mutationThreshold
+       is pinned yet — per D-8 the gate threshold is set JUST BELOW a *measured*
+       score, and the full-module score is captured by the first CI run (do not
+       guess it); core-engine's 94% is the cross-module reference. -->
+  <profiles>
+    <profile>
+      <id>mutation</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-maven</artifactId>
+            <!-- ${pitest.version} (1.20.2), bumped from a hardcoded 1.16.1 whose shaded ASM
+                 predated class-file v69 and threw "Unsupported class file major version 69" on
+                 Java 25 (the 2026-06-05 bump). The 2026-06-05 project-wide migration to the managed
+                 property missed this module; restored 2026-06-16. (prolly-rdf4j uses a hardcoded
+                 1.25.4 — a separate version-unification follow-up.) -->
+            <version>${pitest.version}</version>
+            <dependencies>
+              <dependency>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-junit5-plugin</artifactId>
+                <version>${pitest-junit5.version}</version>
+              </dependency>
+              <!-- pitest-junit5-plugin pins junit-platform 1.9.2, binary-skewed
+                   against this project's JUnit 6 (minion fails "OutputDirectory
+                   Creator not available"). Force the 6.0.3 line. -->
+              <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-launcher</artifactId>
+                <version>6.0.3</version>
+              </dependency>
+              <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-engine</artifactId>
+                <version>6.0.3</version>
+              </dependency>
+              <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-commons</artifactId>
+                <version>6.0.3</version>
+              </dependency>
+              <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>6.0.3</version>
+              </dependency>
+              <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-api</artifactId>
+                <version>6.0.3</version>
+              </dependency>
+            </dependencies>
+            <configuration>
+              <jvmArgs>
+                <value>--enable-native-access=ALL-UNNAMED</value>
+              </jvmArgs>
+              <!-- Full module scope; exclude the demo walkthroughs. Override
+                   with -DtargetClasses=... for a fast focused run. -->
+              <targetClasses>
+                <param>com.earasoft.prolly.*</param>
+              </targetClasses>
+              <excludedClasses>
+                <param>com.earasoft.prolly.demo.*</param>
+              </excludedClasses>
+              <targetTests>
+                <param>com.earasoft.prolly.*</param>
+              </targetTests>
+              <!-- Exclude the bench/scaling-evidence tests from the mutation-killing suite: they
+                   assert O(N^x) work/space scaling and are timing-sensitive, so they fail pitest's
+                   "green without mutation" precheck under the instrumented minion (e.g.
+                   TriejoinScalingEvidence) and abort the whole run. They are benchmarks, not
+                   correctness tests, so they kill no mutants anyway. (core-format-versioning soak
+                   2026-06-16: found when the run was first exercised after the Java 25 pitest bump.) -->
+              <excludedTestClasses>
+                <param>com.earasoft.prolly.bench.*</param>
+              </excludedTestClasses>
+              <threads>4</threads>
+              <outputFormats>
+                <param>HTML</param>
+                <param>XML</param>
+              </outputFormats>
+              <timestampedReports>false</timestampedReports>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!-- -Pcross-lang: runs ONLY the Go-to-Java cross-language fixture validator
+         (CrossLanguageFixtureTest) as its own job. That validator is a
+         main()-style test, so surefire cannot target it directly — its only
+         entry point is the MainMethodTests driver, which this profile scopes to
+         a single class via -Dprolly.mainmethod.only. It soft-skips (passes) when
+         cross-lang/fixtures/ is absent, so a real validation needs the fixtures
+         generated first (cross-lang/gen_fixture.go — Step 16; bit-compatibility
+         with Dolt is optional/deferred per the 2026-05-29 decision).
+           mvn -pl prolly-rdf -am -Pcross-lang test -->
+    <profile>
+      <id>cross-lang</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <includes>
+                <include>**/MainMethodTests.java</include>
+              </includes>
+              <systemPropertyVariables>
+                <prolly.mainmethod.only>CrossLanguageFixtureTest</prolly.mainmethod.only>
+              </systemPropertyVariables>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

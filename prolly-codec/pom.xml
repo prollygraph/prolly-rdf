@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- prolly-codec: the pure term/key codecs, extracted from prolly-rdf4j so
+       both the versioned (prolly-rdf4j) and unversioned (prolly-flatsail)
+       RDF4J Sails can share them WITHOUT one dragging in the other's Sail
+       engine. Depends on prolly-port-core for the tuple/encoding primitives
+       and on rdf4j-model for RDF Value types — but NOT on prolly-rdf4j, so a
+       consumer gets the codecs without the versioned Sail's index engine.
+       Classes keep their original com.earasoft.prolly.rdf4j.* package names
+       so the extraction needs no import rewrites across dependent modules. -->
+
+  <parent>
+    <groupId>io.github.prollygraph</groupId>
+    <artifactId>prolly-rdf-parent</artifactId>
+    <version>0.2.0-BETA</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <groupId>io.github.prollygraph</groupId>
+  <artifactId>prolly-codec</artifactId>
+  <packaging>jar</packaging>
+  <name>Prolly — shared term/key codecs</name>
+  <description>
+    Pure term and key codecs (TermId, TermCodec, QuadOrder, SpocKey, Int64Key,
+    Layouts, hash functions) shared by the versioned and unversioned RDF4J
+    Sails. Depends on prolly-port-core and rdf4j-model, not on prolly-rdf4j.
+  </description>
+
+  <properties>
+    <!-- NullAway GATE (null-safety-migration, pilot #1). prolly-codec is null-clean, so it is the
+         first module gated: under -Perrorprone, NullAway checks these packages at ERROR, so a new
+         null-unsafe deref fails codec's compile. Overrides the parent MAIN defaults
+         (nullaway.packages=__none__, nullaway.severity=WARN). The repo-wide errorprone job stays a
+         warner until its allow_failure ratchet (gated on runner-green, like the CVE gate).
+         com.dolthub.prolly is included so the gate RESPECTS port-core's @Nullable across the dependency
+         boundary (null-safety-rollout D-4 — the two annotation roots share no prefix; widened 2026-06-29
+         after port-core was annotated). codec was clean under it (0 new findings — it already uses
+         port-core's @Nullable API correctly), so the widening was a pom-only change. -->
+    <nullaway.packages>com.dolthub.prolly,com.earasoft.prolly.rdf4j.index,com.earasoft.prolly.rdf4j.term</nullaway.packages>
+    <nullaway.severity>ERROR</nullaway.severity>
+  </properties>
+
+  <!-- rdf4j.version consolidated into the prolly-dependencies BOM (rdf4j-bom). -->
+  <dependencies>
+    <!-- Tuple / encoding primitives (Tuple, TupleBuilder, TupleDescriptor,
+         BufferPool, Encoding, Type, TypeCodec) used by the key codecs. -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>dolthub-java-port</artifactId>
+    </dependency>
+    <!-- Use-after-free test harness (PoisoningBufferPool + ArenaScopeProbe) from prolly-port-core's
+         test-jar — plans/off-heap-use-after-free-tests.md D-5. -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>dolthub-java-port</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <!-- RDF Value model — TermEncoder maps IRI/Literal/BNode to TermIds. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-model</artifactId>    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+    </dependency>
+    <!-- jqwik property-based testing (plans/core-engine-test-strategy.md
+         D-1; version managed in the root pom). For the codec invariant
+         properties (I-5 round-trip + order-preservation). -->
+    <dependency>
+      <groupId>net.jqwik</groupId>
+      <artifactId>jqwik</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- micrometer SimpleMeterRegistry for DictionaryMetricsTest (relocated from
+         prolly-rdf4j). Explicit version: prolly-codec is not a Spring module, so it
+         lacks the spring-boot BOM that manages micrometer in prolly-rdf4j. -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-core</artifactId>
+      <version>1.16.5</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- prolly-codec had no main build section; add one solely to run the jqwik *Property tests
+           (run-dormant-property-tests, P1) — its `DictionaryModelProperty` was dormant under Surefire's
+           default includes (*Test/*Tests/*TestCase). The argLine (tmpdir + jacoco @{argLine}) is inherited
+           from the parent and merged with these includes. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <includes>
+            <include>**/Test*.java</include>
+            <include>**/*Test.java</include>
+            <include>**/*Tests.java</include>
+            <include>**/*TestCase.java</include>
+            <include>**/*Property.java</include>
+          </includes>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!-- -Pmutation: prolly-codec's own mutation run. prolly-codec classes are in the
+         com.earasoft.prolly.rdf4j.* package but their bytecode lives HERE, so they can
+         only be mutated from this module (pitest-maven has no mutableCodePaths to reach a
+         dependency's bytecode — see prolly-rdf4j/pom.xml -Psoak). Activated in the GitLab
+         soak (`-Pmutation,soak`), measure-only (no threshold gate).
+
+         Scope (2026-06-03): the whole codec — term/ + index/ — now that the codec-class
+         tests (Dictionary, TermCodec*, Compare, HashFunction*, Int64Key, Layouts, TermEncoder,
+         SpocKey, QuadOrder, TermId) have been relocated here from prolly-rdf4j. A few paths may
+         still report NO_COVERAGE where their only test stayed behind (e.g. TermEncoder's
+         ProllyLiteral special-float case, which depends on a prolly-rdf4j value type). -->
+
+    <profile>
+      <id>mutation</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-maven</artifactId>
+            <!-- Use the root pitest.version (1.20.2): the old hardcoded 1.16.1 predated the Java 25
+                 bump (2026-06-05) and fails "Unsupported class file major version 69" on the v69 class
+                 files. The pitest-junit5-plugin stays pinned below (deliberate — codec is on JUnit 5.9.3). -->
+            <version>${pitest.version}</version>
+            <dependencies>
+              <dependency>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-junit5-plugin</artifactId>
+                <version>1.2.3</version>
+              </dependency>
+              <!-- Unlike its siblings, prolly-codec is NOT on the JUnit 6 line: jqwik 1.9.2
+                   pulls junit-platform 1.9.3 (and junit-jupiter 5.9.3) transitively, and this
+                   module has no JUnit-6 management to override it. So do NOT force platform
+                   6.0.3 here (the siblings do, because they ARE managed to 6.0.3) — mixing a
+                   6.0.3 launcher with 1.9.3 commons crashes the minion with NoSuchMethodError
+                   (CollectionUtils.forEachInReverseOrder). pitest-junit5-plugin 1.2.3 targets
+                   platform 1.9.2, which is compatible with the module's 1.9.3. -->
+            </dependencies>
+            <configuration>
+              <jvmArgs>
+                <value>--enable-native-access=ALL-UNNAMED</value>
+              </jvmArgs>
+              <targetClasses>
+                <param>com.earasoft.prolly.rdf4j.term.*</param>
+                <param>com.earasoft.prolly.rdf4j.index.*</param>
+              </targetClasses>
+              <targetTests>
+                <param>com.earasoft.prolly.rdf4j.term.*</param>
+                <param>com.earasoft.prolly.rdf4j.index.*</param>
+              </targetTests>
+              <threads>4</threads>
+              <!-- Regression gate (D-4): pinned just under the post-term-faithful-migration
+                   baseline — 2026-06-12: 344 mutations, 313 killed (91%), 92% test strength,
+                   2 NO_COVERAGE (the expected paths whose tests stay in prolly-rdf4j, e.g.
+                   TermEncoder's ProllyLiteral special-float case). The value→lexical migration
+                   (ADR-0043) shrank the surface 625→344 (the Int48 / sign-flipped-scale /
+                   NaN-lex-flip / byte-decoder value code is gone) AND raised the kill rate 89%→91%.
+                   Ratcheted 85→88 to lock the gain (≈3-pt headroom for run variance; the GitLab
+                   soak is measure-only, so this gates local `-Pmutation` runs). -->
+              <mutationThreshold>88</mutationThreshold>
+              <outputFormats>
+                <param>HTML</param>
+                <param>XML</param>
+              </outputFormats>
+              <timestampedReports>false</timestampedReports>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

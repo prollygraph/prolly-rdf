@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- prolly-urdna2015: RDF dataset canonicalization (URDNA2015 / RDFC-1.0)
+       on top of prolly-rdf. Houses RdfCanonicalizer SPI, the
+       SimpleFirstDegree/SecondDegree/Cascade impls, IdentifierIssuer,
+       and CanonicalizingQuadStore. The full W3C URDNA2015 N-degree
+       implementation lands here over sub-iterations 6b-6g per
+       a private implementation guide.
+
+       Consumers that want canonicalization at commit time should
+       declare this module explicitly; prolly-rdf no longer ships
+       canonicalization code transitively. Java packages stay under
+       com.earasoft.prolly.semantic.canon for code-level continuity. -->
+
+  <parent>
+    <groupId>io.github.prollygraph</groupId>
+    <artifactId>prolly-rdf-parent</artifactId>
+    <version>0.2.0-BETA</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <groupId>io.github.prollygraph</groupId>
+  <artifactId>prolly-urdna2015</artifactId>
+  <packaging>jar</packaging>
+  <name>Prolly Tree — URDNA2015 / RDFC-1.0 Canonicalization</name>
+
+  <properties>
+    <!-- NullAway GATE (null-safety-rollout, Step 5 — the URDNA2015 canonicalization adapter). Under
+         -Perrorprone, NullAway checks these packages at ERROR, so a new null-unsafe deref fails this
+         module's compile. Overrides the parent MAIN defaults (nullaway.packages=__none__,
+         nullaway.severity=WARN). Scope is com.dolthub.prolly (port-core) + com.earasoft.prolly (codec /
+         rdf / rdf4j upstreams + this module's own com.earasoft.prolly.semantic.canon) so the gate
+         RESPECTS the @Nullable contracts of the annotated upstreams across the dependency boundary
+         (rollout D-4). NOTE: com.earasoft.prolly.semantic is a SPLIT PACKAGE (prolly-rdf owns part,
+         this module owns the .canon subpackage) — NullAway checks only THIS module's compiled sources;
+         prolly-rdf's classes arrive as an already-annotated jar. The @Nullable vs Objects.requireNonNull
+         discipline is documented in prolly-port-core/src/main/java/com/dolthub/prolly/package-info.java. -->
+    <nullaway.packages>com.dolthub.prolly,com.earasoft.prolly</nullaway.packages>
+    <nullaway.severity>ERROR</nullaway.severity>
+  </properties>
+
+  <dependencies>
+    <!-- jspecify @Nullable for the NullAway gate (plans/null-safety-rollout.md, Step 5).
+         Compile-scoped, BOM-managed; CLASS-retention (compile-only). -->
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-rdf</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- prolly-rdf4j: the RDF4J ProllySail. Per ADR-0037 the canonicalize-at-commit
+         wrapper moves off the native VersionedQuadStore onto a transparent Sail wrapper
+         (CanonicalizingProllySail). -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-rdf4j</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId></dependency>
+    <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-engine</artifactId></dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Line/branch coverage (JaCoCo). prepare-agent publishes the agent
+           argLine into @{argLine}; surefire is overridden below to expand it
+           (the parent pom hard-codes a literal argLine that would otherwise
+           shadow the agent). Report: target/site/jacoco/. -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.14</version>
+        <executions>
+          <execution>
+            <id>jacoco-prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>jacoco-report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>@{argLine} --enable-native-access=ALL-UNNAMED -Djava.io.tmpdir=${project.build.directory}</argLine>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

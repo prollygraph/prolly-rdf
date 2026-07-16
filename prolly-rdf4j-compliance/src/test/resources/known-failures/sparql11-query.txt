@@ -1,0 +1,26 @@
+# W3C SPARQL 1.1 *query* conformance — known-failures baseline.
+# Plan 10 §10.10. One manifest test name (mf:name) per line; '#' = comment.
+#
+# Each entry is skipped via SPARQLComplianceTest.addIgnoredTest so the suite
+# stays green. This is the conformance RATCHET: a test that is NOT on this
+# list and starts failing is not skipped, so it fails the build. When a known
+# failure is fixed, delete its line here.
+#
+# Baseline captured 2026-05-15 at 171/176 passing; SHRUNK 2026-06-12 to 174/176
+# when the term-faithful campaign (ADR-0043) fixed three of the five — see the
+# "FIXED" note at the bottom. See also ComplianceFailureListener, which writes
+# the live failure set to target/compliance-failures.txt.
+
+# --- Category B: unimplemented feature ---
+# CONSTRUCT WHERE with a FROM DatasetClause — FROM-document resolution is not
+# wired through the Sail. Candidate for a real fix; see memory.
+constructwhere04 - CONSTRUCT WHERE
+# Property-path evaluation across named graphs.
+(pp35) Named Graph 2
+
+# --- FIXED by the term-faithful campaign (ADR-0043), removed from the baseline 2026-06-12 ---
+# TZ() / TIMEZONE(): the old fixed-width temporal encoding had no tz-absent slot, so a
+#   tz-less xsd:dateTime was coerced to UTC and TZ()/TIMEZONE() returned "Z"/"PT0S" instead of
+#   ""/unbound. Verbatim lexical temporal storage (Step 6) preserves the tz-absent form → fixed.
+# tsv03: carries a CUSTOM-datatype literal that used to throw "unsupported datatype" on load;
+#   the Dictionary-backed custom-datatype write path (Step 6a) now stores it verbatim → fixed.

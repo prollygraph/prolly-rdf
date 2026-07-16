@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- prolly-dependencies: the dependency Bill of Materials (Maven BOM) for the
+       Prolly Tree Java port. Single source of truth for every dependency version,
+       and an externally importable, pinned set for downstream consumers (the way
+       Spring Boot ships spring-boot-dependencies). See ADR-0042.
+
+       NOT to be confused with prolly-bom / prolly-bom-rest — those are the
+       *Software* Bill of Materials product (SPDX/CycloneDX supply-chain docs).
+       Two different meanings of "BOM"; this is the Maven dependency one (D-1).
+
+       STANDALONE / PARENTLESS, by necessity AND by design (ADR-0042 D-2):
+         * Necessity — if this BOM inherited prolly-parent, then prolly-parent
+           (which imports this BOM) would form a self-import cycle. Maven rejects
+           it outright: "The dependencies of type=pom and with scope=import form a
+           cycle: prolly-parent -> prolly-dependencies -> prolly-dependencies".
+           Confirmed empirically before this module was committed.
+         * Design — a publishable BOM should be parentless so a consumer that
+           imports it inherits ONLY version management, never our compiler /
+           surefire / jacoco build config.
+
+       Reactor membership and inheritance are orthogonal: this module is listed
+       first in prolly-parent's <modules> (so it is model-resolvable before the
+       parent's import) yet does not inherit it. Being parentless and
+       dependency-free, it builds instantly.
+
+       Released in lockstep with the rest of the reactor; declares its version
+       literally because it has no parent to inherit it from (ADR-0042 D-5). -->
+
+  <groupId>io.github.prollygraph</groupId>
+  <artifactId>prolly-rdf-dependencies</artifactId>
+  <version>0.2.0-BETA</version>
+  <packaging>pom</packaging>
+
+  <name>Prolly Tree — Dependency BOM</name>
+  <description>
+    Maven Bill of Materials: the single source of truth for dependency versions
+    across the Prolly Tree Java port, importable by downstream consumers to pin
+    a coherent set. See ADR-0042.
+  </description>
+
+  <!-- Version source of truth. A *dependency* BOM manages DEPENDENCY versions,
+       not plugin / build-tool versions: the latter (spring-boot-maven-plugin,
+       protoc / protoc-gen-grpc-java artifacts, the jmh annotation-processor path,
+       os-maven-plugin, frontend-maven-plugin) are referenced directly in child
+       module build sections, which cannot read an imported BOM's <properties>,
+       so they stay in prolly-parent. The spring-boot-dependencies + grpc-bom
+       imports stay in prolly-parent too — their version properties are entangled
+       with those plugin coordinates (revises ADR-0042 Q1 to "no"; see
+       plans/dependency-bom-module.md D-6). What lives here: third-party
+       dependency coordinates consumed solely through dependencyManagement. -->
+  <properties>
+    <rocksdb.version>8.10.0</rocksdb.version>
+    <flatbuffers.version>23.5.26</flatbuffers.version>
+    <caffeine.version>3.1.8</caffeine.version>
+    <jqwik.version>1.9.2</jqwik.version>
+    <!-- jspecify: the tool-neutral nullness annotation standard (@Nullable /
+         @NullMarked) for the NullAway null-safety migration (plans/null-safety-migration.md
+         D-3). NullAway, ErrorProne, IntelliJ and the Checker Framework all honor it.
+         Compile-scoped + BOM-managed so each module annotated in the rollout adds the
+         dep without a version. CLASS-retention annotations — present at compile, never
+         loaded at runtime. -->
+    <jspecify.version>1.0.0</jspecify.version>
+    <!-- Consolidated from 5 child poms (rdf4j) / 2 child poms (slf4j) that each
+         declared their own copy — single value here now (ADR-0042 D-3, plan Step 2b). -->
+    <rdf4j.version>5.1.4</rdf4j.version>
+    <slf4j.version>2.0.17</slf4j.version>
+    <!-- logback aligned to Spring Boot 4.0.6 (its BOM ships 1.5.32). Pinned here
+         to override rdf4j-bom 5.1.4, which transitively drags the OLD pair
+         logback 1.2.13 + slf4j 1.7.36 — incompatible with Boot 4's
+         RootLogLevelConfigurator (compiled against the logback/slf4j-2.x
+         Configurator interface) → AbstractMethodError at logging init. See
+         prolly-platform-rest/plans/align-slf4j-logback-spring-boot4.md. -->
+    <logback.version>1.5.32</logback.version>
+    <!-- log4j2 bridge aligned to Spring Boot 4.0.6 (its BOM ships 2.25.4). Same
+         rdf4j-bom 5.1.4 drag as logback: it pins log4j-api + log4j-to-slf4j to the
+         old 2.17.2, and the 2.17.2 log4j-to-slf4j bridge is built against slf4j
+         1.7 — once slf4j is 2.x it fails to initialize log4j-api's LogManager
+         (NoClassDefFoundError via commons-logging's Log4jApiLogFactory). -->
+    <log4j2.version>2.25.4</log4j2.version>
+    <!-- jackson-annotations (the com.fasterxml.* artifact shared between Jackson 2
+         and Jackson 3) aligned to Spring Boot 4.0.6. Boot 4 ships Jackson 3.x
+         (tools.jackson.*), whose databind still reads annotations from this 2.x
+         artifact and needs 2.21 (JsonSerializeAs); rdf4j-bom 5.1.4 drags it to
+         2.13.5 → ClassNotFoundException at Jackson-3 mapper init. Only the
+         annotations artifact is pinned (no 2.21 release of core/databind exists;
+         annotations >= databind is Jackson-supported). See align-jackson-spring-boot4.md. -->
+    <jackson-annotations.version>2.21</jackson-annotations.version>
+    <!-- Mockito aligned to Spring Boot 4.0.6 (its BOM ships 5.20.0). rdf4j-bom 5.1.4
+         drags the old 4.11.0, whose default subclass mock-maker cannot mock final
+         classes. Mockito 5's default IS the inline mock-maker, so this fixes
+         final-class mocking everywhere AND makes the per-module
+         mockito-extensions/MockMaker config redundant (now removed). See the
+         align-jackson-spring-boot4.md follow-up. -->
+    <mockito.version>5.20.0</mockito.version>
+    <!-- JUnit aligned to Spring Boot 4.0.6 (its BOM imports junit-bom 6.0.3, and
+         junit-platform 6.0.3 is already the test runner here). rdf4j-bom 5.1.4 drags
+         the JUPITER artifacts back to 5.9.3, leaving jupiter-api 5.9.3 skewed under
+         platform 6.0.3 — spring-test (compiled against JUnit 6) then hits
+         NoSuchMethodError: ExtensionContext$Store.computeIfAbsent on any @SpringBootTest
+         full-context load. Imported below as the junit-bom so every junit-* artifact
+         stays one consistent version. -->
+    <junit.version>6.0.3</junit.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- Internal: the pure Dolt port. Pinned here so a downstream consumer can
+           import this BOM and depend on prolly-port-core without a version
+           (ADR-0042 D-4 — externally-publishable internal coordinates). -->
+      <dependency>
+        <groupId>io.github.prollygraph</groupId>
+        <artifactId>dolthub-java-port</artifactId>
+        <version>0.2.0-BETA</version>
+      </dependency>
+      <!-- Internal: the RDF-free versioned-store substrate (ADR-0060). Pinned here
+           like prolly-port-core above so a downstream consumer (or any of the ~12
+           substrate-only modules) can depend on prolly-storage without a version. -->
+      <dependency>
+        <groupId>io.github.prollygraph</groupId>
+        <artifactId>prolly-storage</artifactId>
+        <version>0.2.0-BETA</version>
+      </dependency>
+      <!-- Logging stack aligned to Spring Boot 4 (slf4j 2.x + logback 1.5).
+           Declared BEFORE the rdf4j-bom import below ON PURPOSE: rdf4j-bom 5.1.4
+           transitively pins the old slf4j 1.7.36 + logback 1.2.13 pair, and
+           Maven's dependencyManagement takes the FIRST version declared for a
+           coordinate (imports expanded in place), so these explicit pins must
+           precede the rdf4j-bom import to win. Without this, Boot 4's
+           RootLogLevelConfigurator hits an AbstractMethodError on the 1.2.x
+           logback Configurator interface, erroring every test that initializes a
+           logger outside a Boot-managed context (≥100 across prolly-platform-rest
+           + prolly-rdf4j-rest). See align-slf4j-logback-spring-boot4.md. -->
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+        <version>${slf4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-classic</artifactId>
+        <version>${logback.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-core</artifactId>
+        <version>${logback.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-to-slf4j</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
+      <!-- jackson-annotations ONLY, aligned to Spring Boot 4 (same
+           first-wins-before-rdf4j-bom reason as the logging pins above). Jackson
+           3.1.2's databind reads annotations from the shared com.fasterxml
+           jackson-annotations artifact and needs 2.21 (JsonSerializeAs); rdf4j-bom
+           5.1.4 drags it to 2.13.5 → ClassNotFoundException at Jackson-3 mapper init.
+           Deliberately NOT pinning jackson-core / jackson-databind / jackson-datatype
+           here: there is no 2.21 release of those (Boot pins only the annotations
+           artifact for Jackson-3 compat), and Jackson's contract allows
+           jackson-annotations >= jackson-databind — so rdf4j's databind 2.13.5 +
+           annotations 2.21 is the supported pairing. See align-jackson-spring-boot4.md. -->
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-annotations</artifactId>
+        <version>${jackson-annotations.version}</version>
+      </dependency>
+      <!-- Mockito aligned to Spring Boot 4 (same first-wins-before-rdf4j-bom reason
+           as the logging + jackson pins). rdf4j-bom 5.1.4 drags mockito-core +
+           mockito-junit-jupiter to 4.11.0; Boot 4.0.6 wants 5.20.0, whose inline
+           mock-maker default mocks final classes. -->
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-core</artifactId>
+        <version>${mockito.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-junit-jupiter</artifactId>
+        <version>${mockito.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- JUnit BOM aligned to Spring Boot 4 (junit 6.0.3 = jupiter + platform
+           together). Imported BEFORE rdf4j-bom so its 6.0.3 wins over rdf4j-bom's
+           jupiter 5.9.3 drag (first-declaration-wins). Without it, jupiter-api 5.9.3
+           runs under platform 6.0.3 and spring-test's SpringExtension breaks. -->
+      <dependency>
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>${junit.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- RDF4J: import the upstream rdf4j-bom so every rdf4j-* artifact resolves
+           at one version. Replaces the <rdf4j.version> property + explicit
+           <version> that were duplicated across prolly-flatsail, prolly-codec,
+           prolly-rdf4j, prolly-rdf4j-rest, prolly-rdf4j-compliance. -->
+      <dependency>
+        <groupId>org.eclipse.rdf4j</groupId>
+        <artifactId>rdf4j-bom</artifactId>
+        <version>${rdf4j.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- rdf4j-bom covers the published library artifacts but NOT the test-suite
+           modules — these must be managed explicitly at the same version. Used by
+           prolly-flatsail (sail) + prolly-rdf4j-compliance (sail/sparql/repository). -->
+      <dependency>
+        <groupId>org.eclipse.rdf4j</groupId>
+        <artifactId>rdf4j-sail-testsuite</artifactId>
+        <version>${rdf4j.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.rdf4j</groupId>
+        <artifactId>rdf4j-sparql-testsuite</artifactId>
+        <version>${rdf4j.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.rdf4j</groupId>
+        <artifactId>rdf4j-repository-testsuite</artifactId>
+        <version>${rdf4j.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- slf4j-nop: the no-op logging binding used by prolly-rdf4j +
+           prolly-rdf4j-compliance. One version here now. -->
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-nop</artifactId>
+        <version>${slf4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.rocksdb</groupId>
+        <artifactId>rocksdbjni</artifactId>
+        <version>${rocksdb.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.flatbuffers</groupId>
+        <artifactId>flatbuffers-java</artifactId>
+        <version>${flatbuffers.version}</version>
+      </dependency>
+      <!-- Caffeine: the production node cache (ADR-0040) — lock-free reads +
+           Window-TinyLFU + byte-weighted bounding; also bounds the per-tx
+           term-encode memo (ADR-0042 follow-on). One version for every module. -->
+      <dependency>
+        <groupId>com.github.ben-manes.caffeine</groupId>
+        <artifactId>caffeine</artifactId>
+        <version>${caffeine.version}</version>
+      </dependency>
+      <!-- micrometer: spring-boot-BOM-managed in the monorepo; the standalone ring pins the
+           same resolved version (1.16.5, measured from the monorepo's dependency:list) -->
+      <dependency>
+        <groupId>io.micrometer</groupId>
+        <artifactId>micrometer-core</artifactId>
+        <version>1.16.5</version>
+      </dependency>
+      <!-- jspecify nullness annotations (@Nullable / @NullMarked) for the NullAway
+           null-safety migration (plans/null-safety-migration.md D-3). Managed here so
+           a module annotated in the rollout adds the dep without a version. -->
+      <dependency>
+        <groupId>org.jspecify</groupId>
+        <artifactId>jspecify</artifactId>
+        <version>${jspecify.version}</version>
+      </dependency>
+      <!-- jqwik property-based testing (plans/core-engine-test-strategy.md D-1).
+           Verified compatible with this project's JUnit Platform 6.0.x by
+           JqwikSmokeProperty (Phase 0 Step 1). -->
+      <dependency>
+        <groupId>net.jqwik</groupId>
+        <artifactId>jqwik</artifactId>
+        <version>${jqwik.version}</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+</project>

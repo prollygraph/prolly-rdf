@@ -1,0 +1,8 @@
+# W3C SPARQL 1.1 *update* conformance — known-failures baseline.
+# Plan 10 §10.10. One manifest test name (mf:name) per line; '#' = comment.
+#
+# Each entry is skipped via SPARQLComplianceTest.addIgnoredTest. A test that is
+# NOT on this list and starts failing fails the build (the ratchet). When a
+# known failure is fixed, delete its line.
+#
+# (Populated after the first baseline run — see target/compliance-failures.txt.)

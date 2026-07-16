@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- prolly-rdf4j-compliance: runs the W3C SPARQL 1.1 conformance suite
+       and RDF4J's Repository/Sail contract suites against a ProllySail.
+
+       Slow + heavy (hundreds of standardized tests) but RUNS BY DEFAULT — a
+       built-but-skipped conformance suite gives no value (safety > build time).
+       CI's `mvn clean install` runs it. Skip the slow phase for a fast local
+       build with -Dprolly.compliance.skip=true. Every contract suite now runs
+       by default — ProllyRepositoryConnectionContractTest (formerly excluded as
+       RED) is green: its value-serialization gap was fixed and its
+       cross-connection-visibility cluster is a documented @Disabled baseline; see
+       plans/prepublic/compliance-suite-live-gate.md.
+
+       See plans/10-sparql-compliance.md. -->
+
+  <parent>
+    <groupId>io.github.prollygraph</groupId>
+    <artifactId>prolly-rdf-parent</artifactId>
+    <version>0.2.0-BETA</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <groupId>io.github.prollygraph</groupId>
+  <artifactId>prolly-rdf4j-compliance</artifactId>
+  <name>Prolly Tree — RDF4J SPARQL/Sail conformance suite</name>
+
+  <properties>
+    <!-- rdf4j.version + slf4j.version consolidated into the prolly-dependencies
+         BOM (rdf4j-bom import + managed slf4j-nop). -->
+    <!-- The conformance + contract suites RUN BY DEFAULT (safety > build time): a
+         built-but-skipped test gives no value — it never catches a regression, so the
+         effort to write + maintain it is wasted. The W3C SPARQL 1.1 query/update suites
+         + the green RDF4J Sail contract / concurrency / isolation suites run on every
+         build (CI's `mvn clean install` includes them). Skip the (~40s) phase for a fast
+         local inner-loop build with -Dprolly.compliance.skip=true. -->
+    <prolly.compliance.skip>false</prolly.compliance.skip>
+  </properties>
+
+  <dependencies>
+    <!-- The Sail under test. -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-rdf4j</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- SailRepository wrapper. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-repository-sail</artifactId>      <scope>test</scope>
+    </dependency>
+    <!-- W3C SPARQL 1.1 compliance abstract test classes + bundled manifests. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-sparql-testsuite</artifactId>      <scope>test</scope>
+    </dependency>
+    <!-- RepositoryConnection contract + Sail RDF-store / isolation / concurrency
+         contract abstract test classes. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-repository-testsuite</artifactId>      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-sail-testsuite</artifactId>      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-nop</artifactId>      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- TestExecutionListener SPI: lets ComplianceFailureListener see the
+         per-test display names that surefire's reports collapse to "tests". -->
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-launcher</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- Runs by default (safety > build time); skip with -Dprolly.compliance.skip=true. -->
+          <skipTests>${prolly.compliance.skip}</skipTests>
+          <!-- No <excludes>: every contract suite runs by default. The formerly-RED
+               ProllyRepositoryConnectionContractTest now runs green — its 30 value-serialization
+               errors were a real gap (fixed via ProllyValue.writeReplace) and its 14
+               cross-connection-visibility failures are baselined as documented @Disabled overrides
+               in the test (single-writer isolation model; unobservable under the per-request
+               connection pattern). See plans/prepublic/compliance-suite-live-gate.md +
+               bugs/rdf4j-repository-connection-contract-triage.md. -->
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

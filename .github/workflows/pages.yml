@@ -1,0 +1,45 @@
+# Builds the static docs site (every tracked markdown, landing-page theme) and
+# deploys it to GitHub Pages on every main push. dist/ is never committed — CI
+# rebuilds from source, so the site cannot drift from the markdown; the builder's
+# built-in internal-link check gates the deploy (a broken link fails the build).
+#
+# One-time owner action: repo Settings → Pages → Source: "GitHub Actions".
+name: docs-site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install markdown
+      - run: python landing-page/build.py .
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,15 @@
+prolly-rdf — RDF-on-prolly ring
+Copyright 2026 Earasoft
+
+Licensed under the Apache License, Version 2.0.
+
+All source in this repository is Earasoft-original: the RDF term codecs, the
+SPOC/POSC/OSPC/CSPO index model, the RDF4J Sail, the leapfrog triejoin, and the
+compliance suites. It contains no third-party-derived source files.
+
+It depends at runtime on the prolly engine ring
+(https://github.com/prollygraph/prolly-core), whose NOTICE carries the upstream
+attribution for that layer — Dolthub, Inc. (the prolly tree this project ports),
+Attic Labs, Inc. (Noms, which Dolt's storage layer derives from), and the
+buzhash rolling-hash reference. Those notices are not restated here; consult the
+engine ring's NOTICE for the code it ships.

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- prolly-flatsail: an UNVERSIONED RDF4J Sail storing quads as plain sorted
+       RocksDB keys in column families — the fast, simple sibling of the
+       versioned prolly-rdf4j ProllySail. No Merkle tree, no history. Shares
+       the pure term/key codecs via prolly-codec. See
+       plans/RocksDbFlatSail-impl.md. -->
+
+  <parent>
+    <groupId>io.github.prollygraph</groupId>
+    <artifactId>prolly-rdf-parent</artifactId>
+    <version>0.2.0-BETA</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <groupId>io.github.prollygraph</groupId>
+  <artifactId>prolly-flatsail</artifactId>
+  <packaging>jar</packaging>
+  <name>Prolly — unversioned RocksDB-backed RDF4J Sail</name>
+  <description>
+    RocksDbFlatSail: an unversioned RDF4J Sail storing dictionary-encoded quads
+    as fixed 32-byte keys across RocksDB column families. The fast, simple
+    sibling of the versioned ProllySail, for high-churn data that needs no
+    history, branching, diff or time-travel.
+  </description>
+
+  <properties>
+    <!-- NullAway GATE (null-safety-rollout, Step 3 — the unversioned Sail). Under -Perrorprone,
+         NullAway checks these packages at ERROR, so a new null-unsafe deref fails flatsail's compile.
+         Overrides the parent MAIN defaults (nullaway.packages=__none__, nullaway.severity=WARN). Scope
+         is com.dolthub.prolly (port-core) + com.earasoft.prolly (codec + this module's own
+         com.earasoft.prolly.flatsail) so the gate RESPECTS the @Nullable contracts of both upstreams
+         across the dependency boundary (rollout D-4; the two annotation roots share no prefix). No
+         unannotated com.earasoft.prolly module sits in flatsail's reactor (it depends only on codec +
+         port-core), so the full prefix is safe here. The @Nullable vs Objects.requireNonNull discipline
+         is documented in prolly-port-core/src/main/java/com/dolthub/prolly/package-info.java. -->
+    <nullaway.packages>com.dolthub.prolly,com.earasoft.prolly</nullaway.packages>
+    <nullaway.severity>ERROR</nullaway.severity>
+  </properties>
+
+  <!-- rdf4j.version consolidated into the prolly-dependencies BOM (rdf4j-bom
+       import); rdf4j-* artifacts below resolve through it without a version. -->
+  <dependencies>
+    <!-- Shared term/key codecs (TermId, TermCodec, QuadOrder, SpocKey, ...). -->
+    <dependency>
+      <groupId>io.github.prollygraph</groupId>
+      <artifactId>prolly-codec</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- jspecify @Nullable for the NullAway gate (plans/null-safety-rollout.md, Step 3).
+         Compile-scoped, BOM-managed; CLASS-retention (compile-only). -->
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+    </dependency>
+    <!-- Sail SPI we extend; pulls in rdf4j-model + rdf4j-common transitively. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-sail-api</artifactId>    </dependency>
+    <!-- Query evaluation: the flat Sail does no pushdown, so connection.evaluate
+         drives RDF4J's DefaultEvaluationStrategy over getStatements(). -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-queryalgebra-evaluation</artifactId>    </dependency>
+    <!-- Backing store: plain sorted keys in RocksDB column families. -->
+    <dependency>
+      <groupId>org.rocksdb</groupId>
+      <artifactId>rocksdbjni</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+    </dependency>
+
+    <!-- Test-only: drive the Sail through a SailRepository and run SPARQL. -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-repository-sail</artifactId>      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-queryparser-sparql</artifactId>      <scope>test</scope>
+    </dependency>
+    <!-- Test-only: RDF4J's Sail SPI contract suite (RDFStoreTest). -->
+    <dependency>
+      <groupId>org.eclipse.rdf4j</groupId>
+      <artifactId>rdf4j-sail-testsuite</artifactId>      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
