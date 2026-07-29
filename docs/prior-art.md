@@ -70,6 +70,25 @@ store; prolly-rdf4j is an **RDF4J Sail** (standard SPARQL, drops into the Java
 RDF ecosystem) on a Dolt-derived prolly tree. Same git-for-graphs thesis,
 different query language, store, and ecosystem fit.
 
+Three architectural differences worth naming precisely:
+
+- **Integration model.** TerminusDB is out-of-process for a JVM consumer;
+  prolly-rdf4j is a library — `mvn dependency:tree` ends at `prolly-rdf4j` and
+  the Sail runs in your process. That cuts both ways: in-process means no
+  network hop, and also dependency + Java-version coupling
+  ([ADR-0044](../prolly-rdf4j/docs/adr/0044-server-client-default-integration-model.md)
+  makes the client model the default for exactly that reason).
+- **Shared substrate with Dolt — narrow, and not a headline.** prolly-rdf4j and
+  Dolt share the prolly *tree* engine, so in principle they could share chunk
+  storage and remote tooling. But the data shapes differ — quads here, SQL rows
+  there — so there is **no** "open your RDF graph in Dolt" interoperability, and
+  byte-compatibility would not create any. The real value of the shared lineage
+  is narrower: Go as a golden-master oracle for the Java port's correctness
+  ([cross-language fixtures](bitcompat-findings.md)). Treat it as a niche
+  property, not a differentiator.
+- **Licensing shape.** Both are open source; TerminusDB pairs its with a
+  commercial cloud offering, while this substrate is Apache-2.0 throughout.
+
 ### lakeFS / Nessie / Iceberg — git-for-data, wrong layer
 These bring branch/merge/time-travel to **data lakes** — files, object stores,
 table formats — not to a queryable graph of triples. The granularity is a
@@ -77,8 +96,24 @@ file/table commit, not a triple-level merge with semantic diff. Complementary,
 not competing: they version the lake; this versions the graph inside it.
 
 ### Plain triple stores — the baseline
-RDF4J NativeStore, GraphDB, Stardog, Amazon Neptune, Oxigraph: mature SPARQL
-engines with **no versioning**. prolly-rdf4j's pitch against them is precisely
+
+"No versioning" flattens real differences; what these engines actually offer
+ranges from nothing to point-in-time recovery, none of it branchable:
+
+| Engine | Implementation | Versioning posture |
+|---|---|---|
+| Apache Jena (TDB, Fuseki) | Java | none — the default JVM choice, mature and widely deployed |
+| RDF4J NativeStore | Java | none — the embedded library this project implements a Sail for |
+| Ontotext GraphDB | Java | snapshots |
+| Stardog | Java | snapshots; enterprise reasoning + virtualization |
+| Virtuoso | C/C++ | audit log, no branching; multi-model SQL + SPARQL |
+| Amazon Neptune | managed | point-in-time restore, not branching |
+| Oxigraph | Rust | none — deliberately light and embeddable |
+
+The pattern is the point: **versioning gets layered on by pipelines, not by the
+store.** Teams stitch git plus a transformation tool plus the triplestore, and
+the graph itself still has no commits to diff or merge. That is the gap this
+project targets. prolly-rdf4j's pitch against them is precisely
 the two things they lack — **history (branch/merge/time-travel)** and the **worst-case-optimal join** — delivered as an RDF4J Sail so it slots into the same ecosystem. Their
 pitch back is overwhelming: years of production hardening, scale, and features.
 
