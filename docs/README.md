@@ -5,6 +5,7 @@
 | [`the-chunk-store.md`](the-chunk-store.md) | The content-addressed chunk store the ring writes into — the substrate contract everything here assumes |
 | [`prior-art.md`](prior-art.md) | Where this design sits relative to Dolt, RDF triple stores, and versioned-graph prior art |
 | [`developer-skill-sets.md`](developer-skill-sets.md) | What working on this ring asks of you — competencies per module, ramp difficulty, and where to start given what you already know. |
+| [`operator-notes.md`](operator-notes.md) | Running a process that embeds this Sail: index/disk cost, memory during ingest and query, choosing between the two Sails, backup, and upgrade. |
 | [`bitcompat-findings.md`](bitcompat-findings.md) | The Dolt bit-compatibility findings (historical record): what parity holds, and why byte-for-byte compatibility is deliberately optional |
 
 ## Foundations — the concepts everything else assumes
