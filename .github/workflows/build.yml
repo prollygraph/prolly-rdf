@@ -14,9 +14,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check out the engine ring (needs ENGINE_RING_TOKEN)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: prollygraph/prolly-core
           token: ${{ secrets.ENGINE_RING_TOKEN }}
