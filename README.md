@@ -29,6 +29,9 @@ RDF-shaped lives here.
 | `constructwhere04 - CONSTRUCT WHERE` | `CONSTRUCT WHERE` with a `FROM` dataset clause — `FROM`-document resolution is not wired through the Sail. Candidate fix identified. |
 | `(pp35) Named Graph 2` | Property-path evaluation across named graphs is not implemented. Feature backlog. |
 
+Full report with methodology and reproduction steps:
+[`CONFORMANCE.md`](CONFORMANCE.md).
+
 Maintainer and contact routes: [`MAINTAINERS.md`](MAINTAINERS.md).
 
 ## The repo family
