@@ -67,7 +67,7 @@
     <jspecify.version>1.0.0</jspecify.version>
     <!-- Consolidated from 5 child poms (rdf4j) / 2 child poms (slf4j) that each
          declared their own copy — single value here now (ADR-0042 D-3, plan Step 2b). -->
-    <rdf4j.version>5.1.4</rdf4j.version>
+    <rdf4j.version>6.0.0</rdf4j.version>
     <slf4j.version>2.0.17</slf4j.version>
     <!-- logback aligned to Spring Boot 4.0.6 (its BOM ships 1.5.32). Pinned here
          to override rdf4j-bom 5.1.4, which transitively drags the OLD pair
