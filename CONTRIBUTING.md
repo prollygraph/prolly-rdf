@@ -83,3 +83,28 @@ AI assistance is welcome — this project itself is developed with it (see the
   same PR, `mvn verify` green, docs updated.
 - **Confirm you have the right to contribute it** under [Apache-2.0](LICENSE) — don't
   paste in AI output reproducing code whose license or provenance you can't vouch for.
+
+## Running the conformance suites
+
+The W3C SPARQL 1.1 suites and the RDF4J store/repository contract suites live in
+`prolly-rdf4j-compliance` and run inside the normal gated build — `mvn clean install`
+at the ring root runs everything. To iterate on just the compliance module:
+
+```bash
+mvn -pl prolly-rdf4j-compliance -am test
+```
+
+Fixtures arrive via Eclipse's published `rdf4j-*-testsuite` artifacts (none embedded).
+The known-failures baseline under
+`prolly-rdf4j-compliance/src/test/resources/known-failures/` is the ratchet described
+above; the categorized view of every accepted failure is
+[`docs/conformance-frontier.md`](prolly-rdf4j-compliance/docs/conformance-frontier.md).
+
+## Reporting issues
+
+- **Bugs / questions / feature requests:** GitHub issues on this repo. For a bug, the
+  version (`0.2.0-BETA` or a commit hash), a minimal reproduction, and the observed vs
+  expected behavior make it actionable.
+- **Suspected vulnerabilities:** never a public issue — use the private route in
+  [`SECURITY.md`](SECURITY.md).
+- **Maintainer:** see [`MAINTAINERS.md`](MAINTAINERS.md).

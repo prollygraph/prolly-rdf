@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "prolly-rdf"
+abstract: >-
+  RDF storage on content-addressed prolly trees: dictionary-encoded terms, four
+  SPOC permutation indexes, commit-DAG versioning with branches, tags, merge and
+  time-travel reads, and a worst-case-optimal leapfrog triejoin for cyclic basic
+  graph patterns — exposed as an Eclipse RDF4J Sail.
+type: software
+version: 0.2.0-BETA
+license: Apache-2.0
+repository-code: "https://github.com/prollygraph/prolly-rdf"
+authors:
+  - given-names: Manny
+    family-names: Rivera
+    affiliation: Earasoft
+keywords:
+  - rdf
+  - sparql
+  - rdf4j
+  - triplestore
+  - semantic-web
+  - knowledge-graph
+  - version-control
+  - prolly-tree
+  - java

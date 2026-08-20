@@ -9,6 +9,28 @@ ring** over the engine ring at
 engine (chunking, content addressing, structural sharing) lives there; everything
 RDF-shaped lives here.
 
+## Conformance and testing, up front
+
+- **SPARQL 1.1 conformance: 174/176 query, 90/90 update** (W3C suites via Eclipse's
+  published `rdf4j-*-testsuite` artifacts, run in every gated build). The two known
+  query failures are named below, not hidden.
+- **3,085 tests, 0 failures** across the ring's seven modules — measured 2026-07-24 on
+  the full gated build; `mvn clean install` is always the live count. Two tests are
+  deliberately parked with a filed bug (an upstream concurrency choreography needing two
+  concurrently-open write transactions); they are `@Disabled` with the reason inline.
+- **The known-failures baseline may shrink but never grow** — a conformance ratchet
+  enforced by the build (last shrank 2026-06-12, 5 → 2).
+
+**The two known query failures**, from the
+[conformance frontier](prolly-rdf4j-compliance/docs/conformance-frontier.md):
+
+| Test | Why it fails |
+|---|---|
+| `constructwhere04 - CONSTRUCT WHERE` | `CONSTRUCT WHERE` with a `FROM` dataset clause — `FROM`-document resolution is not wired through the Sail. Candidate fix identified. |
+| `(pp35) Named Graph 2` | Property-path evaluation across named graphs is not implemented. Feature backlog. |
+
+Maintainer and contact routes: [`MAINTAINERS.md`](MAINTAINERS.md).
+
 ## The repo family
 
 Three sibling repos ("rings") under [prollygraph](https://github.com/prollygraph),
@@ -80,6 +102,25 @@ The suggested path, shallowest to deepest:
 
 Contributing? [`CONTRIBUTING.md`](CONTRIBUTING.md) covers the build gates (they *are*
 the build), test conventions, and when a change needs an architecture decision record.
+
+## How the triejoin engages RDF4J's query engine
+
+Readers who know RDF4J will assume its query engine sits above the Sail and defeats any
+storage-level join advantage. Here is exactly what happens
+([ADR-0065](prolly-rdf4j/docs/adr/0065-triejoin-routing-default-on.md)):
+
+- Routing lives in the Sail's `evaluate()`: the connection inspects the algebra RDF4J
+  hands it, extracts basic graph patterns, and routes a `Join` subtree to the
+  worst-case-optimal leapfrog triejoin **only when its variable hypergraph is cyclic**.
+- **Acyclic, star, and single-pattern queries deliberately fall back to RDF4J's
+  bind-join**, which wins on those shapes. The triejoin fires only where
+  worst-case-optimal evaluation has an advantage.
+- Routing is **on by default** (`prolly.rdf4j.triejoin-enabled`, default-on since
+  2026-06-21) with a correctness lock: the W3C SPARQL 1.1 query suite runs flag-on with
+  results identical to flag-off, plus a randomized Sail-level agreement property.
+- Measured effect (multi-fork JMH, Welch's t): the cyclic triangle query is **2.56×
+  faster at 380 edges, 2.81× at 2,000** versus bind-join, and **11.5× on the real
+  wiki-Vote graph** (3.2 s vs 36.8 s); the acyclic two-hop control is within noise.
 
 ## Conformance, measured
 
