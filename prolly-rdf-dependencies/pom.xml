@@ -54,7 +54,7 @@
        plans/dependency-bom-module.md D-6). What lives here: third-party
        dependency coordinates consumed solely through dependencyManagement. -->
   <properties>
-    <rocksdb.version>8.10.0</rocksdb.version>
+    <rocksdb.version>10.10.1.1</rocksdb.version>
     <flatbuffers.version>23.5.26</flatbuffers.version>
     <caffeine.version>3.1.8</caffeine.version>
     <jqwik.version>1.9.2</jqwik.version>
