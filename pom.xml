@@ -486,7 +486,7 @@
                   <path>
                     <groupId>org.checkerframework</groupId>
                     <artifactId>dataflow-nullaway</artifactId>
-                    <version>3.49.2</version>
+                    <version>4.2.2</version>
                   </path>
                   <path>
                     <groupId>org.checkerframework</groupId>
