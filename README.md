@@ -30,7 +30,11 @@ RDF-shaped lives here.
 | `(pp35) Named Graph 2` | Property-path evaluation across named graphs is not implemented. Feature backlog. |
 
 Full report with methodology and reproduction steps:
-[`CONFORMANCE.md`](CONFORMANCE.md).
+[`CONFORMANCE.md`](CONFORMANCE.md). The storage layer beneath this ring is
+specified normatively in the engine ring — the
+[on-disk format](https://github.com/prollygraph/prolly-core/blob/main/docs/spec/on-disk-format.md)
+and [sync protocol](https://github.com/prollygraph/prolly-core/blob/main/docs/spec/sync-protocol.md)
+specifications, constants cited to code.
 
 Maintainer and contact routes: [`MAINTAINERS.md`](MAINTAINERS.md).
 
