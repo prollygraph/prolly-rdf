@@ -59,7 +59,10 @@ public final class Int64Key {
      * {@link #writeInto} + release the block themselves.
      */
     public static MemorySegment toTupleSegment(BufferPool pool, long value) {
-        return writeInto(pool.borrow(TUPLE_SIZE), value);
+        // borrowRetained: held as a staged key until flush, never recycled —
+        // exact-size allocation, not the pool's bucket rounding (see
+        // SpocKey.toTupleSegment for the measured why).
+        return writeInto(pool.borrowRetained(TUPLE_SIZE), value);
     }
 
     /**

@@ -151,4 +151,39 @@ class Int64KeyTest {
             assertEquals(v, read, "column value must round-trip for " + v);
         }
     }
+
+    /**
+     * CANONICALITY — the presence-index contract, pinned where it is relied on: the dictionary
+     * enables {@code SpillableSortedBuffer}'s presence index, whose absent answers are sound only
+     * if comparator-equal keys are byte-identical. For this fixed-width single-column layout,
+     * equal values through independent builds must produce byte-identical tuples.
+     */
+    @Test
+    void equal_values_build_byte_identical_tuples() {
+        for (long v : new long[] {0L, 1L, -1L, 42L, Long.MAX_VALUE, Long.MIN_VALUE}) {
+            var a = Int64Key.toTupleSegment(pool(), v);
+            var b = Int64Key.toTupleSegment(pool(), v);
+            assertEquals(a.byteSize(), b.byteSize());
+            for (long i = 0; i < a.byteSize(); i++) {
+                assertEquals(
+                        a.get(java.lang.foreign.ValueLayout.JAVA_BYTE, i),
+                        b.get(java.lang.foreign.ValueLayout.JAVA_BYTE, i),
+                        "byte " + i + " must match for value " + v);
+            }
+        }
+    }
+
+    /**
+     * The retained-key allocation is exact-size: {@code toTupleSegment} goes through {@code
+     * borrowRetained}, so the heap pool's 1 KiB bucket floor no longer amplifies every staged
+     * dictionary key ~85x (12 real bytes vs a 1024-byte backing array) for the transaction's
+     * lifetime. The BACKING array is the proof — the segment slice always claimed 12.
+     */
+    @Test
+    void retained_key_backing_array_is_exact_size() {
+        var seg = Int64Key.toTupleSegment(pool(), 42L);
+        byte[] backing =
+                (byte[]) seg.heapBase().orElseThrow(() -> new AssertionError("heap-backed"));
+        assertEquals(Int64Key.TUPLE_SIZE, backing.length, "no bucket floor on retained keys");
+    }
 }

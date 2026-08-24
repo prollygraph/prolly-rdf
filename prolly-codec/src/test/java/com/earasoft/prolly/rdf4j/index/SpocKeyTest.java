@@ -223,4 +223,23 @@ class SpocKeyTest {
                 termOrder != idxOrder,
                 "TermId order and index order DISAGREE for natural-vs-extension (documented mismatch)");
     }
+
+    /**
+     * The retained-key allocation is exact-size: {@code toTupleSegment} goes through {@code
+     * borrowRetained}, so the heap pool's 1 KiB bucket floor no longer turns every 42-byte staged
+     * quad key into 24x its size for the transaction's lifetime (four index inserts per quad — the
+     * measured bulk-ingest OutOfMemoryError). The BACKING array is the proof.
+     */
+    @org.junit.jupiter.api.Test
+    void retained_key_backing_array_is_exact_size() {
+        var seg =
+                new SpocKey(TermId.of(1), TermId.of(2), TermId.of(3), TermId.of(4))
+                        .toTupleSegment(new com.dolthub.prolly.HeapBufferPool());
+        assertEquals(SpocKey.TUPLE_SIZE, seg.byteSize());
+        byte[] backing =
+                (byte[])
+                        seg.heapBase()
+                                .orElseThrow(() -> new AssertionError("heap-backed segment"));
+        assertEquals(SpocKey.TUPLE_SIZE, backing.length, "no bucket floor on retained keys");
+    }
 }

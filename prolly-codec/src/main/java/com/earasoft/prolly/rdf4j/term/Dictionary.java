@@ -118,10 +118,18 @@ public final class Dictionary {
     private static final long DICT_SPILL_BYTES = Long.getLong("prolly.tx.dict.spill.bytes", -1L);
 
     private MutableMap newBuffer(StaticMap base) {
+        // presenceIndex=true, unconditionally: encode's dedup get() is the
+        // measured quadratic wall once this buffer spills (each absent
+        // first-encounter term walked every run file), and the Int64 keys
+        // built by Int64Key.toTupleSegment are canonical — equal values are
+        // byte-identical tuples — which is exactly the index's contract.
+        // With the index, a spilled dictionary encodes in amortized O(1) per
+        // term, so DICT_SPILL_BYTES (keeping the buffer in-heap) becomes a
+        // tuning knob rather than the only escape from O(runs) per term.
         return DICT_SPILL_BYTES > 0
                 ? new MutableMap(
-                        base, store, keySchema, pool, Int64Key.COMPARATOR, DICT_SPILL_BYTES)
-                : new MutableMap(base, store, keySchema, pool, Int64Key.COMPARATOR);
+                        base, store, keySchema, pool, Int64Key.COMPARATOR, DICT_SPILL_BYTES, true)
+                : new MutableMap(base, store, keySchema, pool, Int64Key.COMPARATOR, true);
     }
 
     /** Re-open against an existing committed root. */
@@ -264,7 +272,11 @@ public final class Dictionary {
      */
     public StaticMap commit() {
         StaticMap next = buffer.flush();
-        this.buffer = new MutableMap(next, store, keySchema, pool, Int64Key.COMPARATOR);
+        // Through newBuffer, not a bare construction: the rebase buffer must
+        // carry the same presence-index + spill tuning as every other dict
+        // buffer, or the post-flush dictionary silently loses the very
+        // properties the constructor chain establishes.
+        this.buffer = newBuffer(next);
         return next;
     }
 

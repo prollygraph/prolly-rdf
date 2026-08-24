@@ -135,7 +135,12 @@ public final class SpocKey {
      * TupleBuilder.build()} for these four columns, but without its five per-key borrows.
      */
     public MemorySegment toTupleSegment(BufferPool pool) {
-        return writeInto(pool.borrow(TUPLE_SIZE));
+        // borrowRetained, not borrow: this segment is held as a MutableMap key
+        // until flush (never recycled, ADR-0062 D-3), so the pool's bucket
+        // rounding was pure live-heap amplification — the heap pool's 1 KiB
+        // floor made every 42-byte staged key 24x its size for the whole
+        // transaction (the measured bulk-ingest OOM).
+        return writeInto(pool.borrowRetained(TUPLE_SIZE));
     }
 
     /**
