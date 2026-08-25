@@ -378,14 +378,30 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
         if (sail.eventSinkActive()) {
             // eventSinkActive() == (eventSinkEnabled && factory != null), so the factory is
             // present.
+            terminateEventSink(); // a re-fork (rollback) must not leak the prior sink
             eventSinkTx =
                     Objects.requireNonNull(sail.eventSinkFactory())
                             .open(sail.store(), tx, sail.eventSinkRoot());
         } else {
-            eventSinkTx = null;
+            terminateEventSink();
         }
 
         forkSnapshot = snap; // the same atomic snapshot the tables were forked from
+    }
+
+    /**
+     * Terminate a live event sink with {@code discard()} and forget it — the exactly-once half of
+     * the {@link com.earasoft.prolly.rdf4j.sail.spi.MutationEventSink} lifecycle contract (every
+     * opened sink sees commit() XOR discard(); the commit path nulls the field after consuming, so
+     * reaching here with a non-null sink always means abandonment: rollback's re-fork, a
+     * sink-disabling re-fork, or connection close). Hardening round 1: the contract test caught
+     * every fork leaking its predecessor — nothing ever discarded.
+     */
+    private void terminateEventSink() {
+        if (eventSinkTx != null) {
+            eventSinkTx.discard();
+            eventSinkTx = null;
+        }
     }
 
     /** Package-private accessor for tests. */
@@ -399,6 +415,7 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
 
     @Override
     protected void closeInternal() throws SailException {
+        terminateEventSink(); // a closing connection abandons any un-consumed sink
         LOG.debug("[{}] connection closed", connId);
         // If the caller closed without a commit/rollback (or the Sail is
         // shutting down and closing us from another thread), don't leak the
@@ -589,12 +606,14 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
                 t = System.nanoTime();
                 if (sail.wouldBeNoOpCommit()) {
                     eventSinkTx.discard();
+                    eventSinkTx = null;
                     LOG.debug(
                             "[{}] commit no-op detected — discarding {} pending event(s)",
                             connId,
                             "<sink>");
                 } else {
                     sail.advanceEventSinkRoot(eventSinkTx.commit());
+                    eventSinkTx = null;
                 }
                 m.timer("sail.commit.event-sink")
                         .record(System.nanoTime() - t, TimeUnit.NANOSECONDS);

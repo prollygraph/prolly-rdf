@@ -6,6 +6,16 @@ supported transition. Entries below are release-level; day-to-day history is the
 
 ## Unreleased
 
+### Write path
+
+- **MutationEventSink lifecycle is exactly-once.** Hardening round 1's red-first contract test
+  caught every fork leaking its predecessor's sink (rollback's re-fork, sink-disabling re-forks,
+  and connection close all abandoned live sinks — 0 of 3 opened sinks ever saw a terminal call).
+  Every opened sink now sees commit() XOR discard() exactly once: the commit path nulls the
+  consumed sink, re-forks and close discard any live one. Also pinned: the FIRST commit is real
+  even when empty (genesis creates the initial tree + log entry), so its sink rightly commits;
+  the no-op regime begins after genesis.
+
 ### Conformance
 
 - **RDF-star lands end to end (round 3).** The write path routes `Triple` values through the
