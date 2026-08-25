@@ -128,3 +128,17 @@ dead-resource-API guard passing (then `--strict` in CI) once a real caller exist
 - **Q2** — Are `SpocKey` / `Int64Key` lookup keys **transient** (recycle after the get/scan) or
   **retained**? Verify per call site before recycling (D-3 (c)); if any retains the key, it stays on the
   coarse net.
+
+## Implementation status (2026-08-25)
+
+The retained-segment half of the two-tier model landed by a different door
+than D-2 sketched: rather than scope-recycling (which D-3 itself forbids for
+staged keys), the engine gained `BufferPool.borrowRetained` — exact-size
+allocation for keys held in `MutableMap.edits` until flush — and the
+retained-key sites here (`SpocKey`/`Int64Key.toTupleSegment`) switched to
+it, eliminating the heap pool's 1 KiB bucket amplification (24× per quad
+key) that this ADR's Option C analysis identified as the dead-scratch
+driver. Measured downstream (consumer traces in quarkus-ontology-editor,
+`ncit-runs`): full 10.77M-statement single-transaction ingest at `-Xmx3g`.
+Fine-grained scratch recycling (the transient-lookup half) and the
+DirectBufferPool promotion remain future work, unchanged.
