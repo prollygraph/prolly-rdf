@@ -159,6 +159,17 @@ class SnapshotDifferentialProperty {
     private static String term(Value v) {
         if (v.isIRI()) return "I:" + v.stringValue();
         if (v.isBNode()) return "B:" + ((BNode) v).getID();
+        if (v instanceof org.eclipse.rdf4j.model.Triple t) {
+            // RDF-star joined the differential generators (round 3): canonicalize
+            // a quoted triple by its components, recursively.
+            return "T:<<"
+                    + term(t.getSubject())
+                    + '|'
+                    + term(t.getPredicate())
+                    + '|'
+                    + term(t.getObject())
+                    + ">>";
+        }
         Literal l = (Literal) v;
         return "L:"
                 + l.getLabel()

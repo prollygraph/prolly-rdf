@@ -47,14 +47,28 @@ public final class QuadGen {
     }
 
     /**
-     * Statements safe for the <b>differential oracle</b> (S-2): subjects are IRIs/BNodes, objects
-     * are lexically-stable terms (IRI/BNode/plain/lang — {@link RdfValueGen#stableObjects}).
-     * Excludes (a) RDF-star quoted triples — {@code ProllySail} can't ingest a foreign-factory
-     * triple ({@code RdfStarIngestGapTest}), and (b) typed literals — whose lexical form ProllySail
-     * may canonicalize, a fidelity question owned by S-3 / Step 8, not structural equivalence.
+     * Statements safe for the <b>differential oracle</b> (S-2): subjects are IRIs/BNodes or
+     * RDF-star quoted triples over stable components, objects are lexically-stable terms
+     * (IRI/BNode/plain/lang — {@link RdfValueGen#stableObjects}) or such quoted triples. RDF-star
+     * joined the oracle when the round-3 write-path wiring landed (2026-08-25 — {@code
+     * RdfStarIngestGapTest}'s gap pin flipped to parity); typed literals stay excluded, inside
+     * quoted triples too — their lexical fidelity is S-3 / Step 8's question, not structural
+     * equivalence.
      */
     public static Arbitrary<Statement> differentialStatements() {
-        return statements(RdfValueGen.resources(), RdfValueGen.stableObjects());
+        Arbitrary<org.eclipse.rdf4j.model.Triple> stableQuoted =
+                Combinators.combine(
+                                RdfValueGen.resources(),
+                                RdfValueGen.iris(),
+                                RdfValueGen.stableObjects())
+                        .as(RdfValueGen.VF::createTriple);
+        Arbitrary<Resource> subjects =
+                Arbitraries.oneOf(RdfValueGen.resources(), stableQuoted.map(t -> (Resource) t));
+        Arbitrary<org.eclipse.rdf4j.model.Value> objects =
+                Arbitraries.oneOf(
+                        RdfValueGen.stableObjects(),
+                        stableQuoted.map(t -> (org.eclipse.rdf4j.model.Value) t));
+        return statements(subjects, objects);
     }
 
     private static Arbitrary<Statement> statements(

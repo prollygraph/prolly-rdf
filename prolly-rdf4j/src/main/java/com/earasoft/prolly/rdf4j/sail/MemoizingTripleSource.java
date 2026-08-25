@@ -67,7 +67,8 @@ import org.eclipse.rdf4j.query.algebra.evaluation.TripleSource;
  *     D-3). All three are belt-and-suspenders on top of the s+p-bound gate, which already excludes
  *     the large scans.
  */
-final class MemoizingTripleSource implements TripleSource {
+final class MemoizingTripleSource
+        implements org.eclipse.rdf4j.query.algebra.evaluation.RDFStarTripleSource {
 
     /** A memoizable lookup: subject + predicate bound, object + contexts as given. */
     private record Key(Resource subj, IRI pred, Value obj, List<Resource> contexts) {}
@@ -143,5 +144,22 @@ final class MemoizingTripleSource implements TripleSource {
     @Override
     public ValueFactory getValueFactory() {
         return delegate.getValueFactory();
+    }
+
+    /**
+     * SPARQL-star pass-through: {@code TripleRef} enumeration is not the s+p-bound re-probe this
+     * memo exists for, and hiding the delegate's {@code RDFStarTripleSource} face would silently
+     * flip the evaluator to its reification fallback whenever the memo flag is on.
+     */
+    @Override
+    public org.eclipse.rdf4j.common.iteration.CloseableIteration<
+                    ? extends org.eclipse.rdf4j.model.Triple>
+            getRdfStarTriples(
+                    org.eclipse.rdf4j.model.Resource subj,
+                    org.eclipse.rdf4j.model.IRI pred,
+                    org.eclipse.rdf4j.model.Value obj)
+                    throws org.eclipse.rdf4j.query.QueryEvaluationException {
+        return ((org.eclipse.rdf4j.query.algebra.evaluation.RDFStarTripleSource) delegate)
+                .getRdfStarTriples(subj, pred, obj);
     }
 }

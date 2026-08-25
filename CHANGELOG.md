@@ -8,6 +8,17 @@ supported transition. Entries below are release-level; day-to-day history is the
 
 ### Conformance
 
+- **RDF-star lands end to end (round 3).** The write path routes `Triple` values through the
+  codec's existing `encodeQuotedTriple` (recursive component interning; the canonical ASSERTED
+  tag, since the TermId is the content hash of the bytes — two tags would make one triple term
+  two terms), `findTermId` mirrors it read-only, and `SailConnectionTripleSource` now implements
+  `RDFStarTripleSource` (statement-driven, deduplicated triple-term enumeration; the memoizing
+  wrapper passes it through) so SPARQL-star `<<?s ?p ?o>>` patterns evaluate against native
+  triple terms instead of RDF4J's reification fallback. `RDFStarSupportTest` 10/10 — all eight
+  previously-`@Disabled` acceptance tests plus the two that already passed — and
+  `testAddTripleContext` re-enabled on both store-contract suites (the triple-as-context
+  rejection guard finally executes instead of dying earlier in the encoder).
+
 - **SPARQL conformance round 2 — two frontier fixes, four defects the gap-wiring surfaced, and
   ~1,000 newly wired contract tests.** W3C `(pp35) Named Graph 2` fixed (graph-scoped
   zero-length-path walk + per-named-graph decomposition of both-ends-unbound property paths in

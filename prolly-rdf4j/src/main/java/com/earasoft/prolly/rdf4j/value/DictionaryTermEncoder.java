@@ -55,9 +55,28 @@ public final class DictionaryTermEncoder {
     /**
      * Encode {@code v} to term bytes for a <b>write</b>. A custom-datatype literal interns its
      * datatype IRI in {@code dict} (allocating a {@code TermId} if absent) and is encoded as a
-     * custom literal; everything else delegates to {@link TermEncoder#encode}. Never returns null.
+     * custom literal; an RDF-star {@link Triple} recursively interns its three components and is
+     * encoded as a quoted triple; everything else delegates to {@link TermEncoder#encode}. Never
+     * returns null.
+     *
+     * <p><b>Quoted-triple canonical tag:</b> RDF4J's {@link Triple} value carries no
+     * asserted/unasserted distinction, so every RDF4J-sourced triple term encodes with the ASSERTED
+     * tag ({@code 0xC0}) — the one {@code DictionaryTermResolver} decodes to {@link ProllyTriple}.
+     * One canonical tag is load-bearing for content addressing: the TermId is the hash of these
+     * bytes, so writing one tag and looking up another would make the same triple term two
+     * different terms. The unasserted and quad tags stay reserved for a future semantic layer that
+     * actually carries the distinction.
      */
     public static MemorySegment encodeForWrite(Value v, Dictionary dict, Arena arena) {
+        if (v instanceof org.eclipse.rdf4j.model.Triple t) {
+            // Recursion by TermId, exactly the codec's layout: intern the three
+            // components first (a nested quoted triple recurses through this
+            // same branch), then reference them.
+            TermId sId = dict.encode(encodeForWrite(t.getSubject(), dict, arena));
+            TermId pId = dict.encode(encodeForWrite(t.getPredicate(), dict, arena));
+            TermId oId = dict.encode(encodeForWrite(t.getObject(), dict, arena));
+            return TermCodec.encodeQuotedTriple(sId, pId, oId, true, arena);
+        }
         IRI customDt = customDatatype(v);
         if (customDt == null) {
             return TermEncoder.encode(v, arena);
@@ -69,10 +88,27 @@ public final class DictionaryTermEncoder {
     /**
      * Look up {@code v}'s {@link TermId} for a <b>read</b>. For a custom-datatype literal the
      * datatype IRI is looked up (not interned): if it is absent the literal cannot be in the store,
-     * so this returns {@link Optional#empty()}. Everything else delegates to {@link
-     * Dictionary#findTermId}.
+     * so this returns {@link Optional#empty()}. An RDF-star {@link Triple} looks up its three
+     * components the same way — any component absent means the triple term cannot be in the store.
+     * Everything else delegates to {@link Dictionary#findTermId}.
      */
     public static Optional<TermId> findTermId(Value v, Dictionary dict, Arena arena) {
+        if (v instanceof org.eclipse.rdf4j.model.Triple t) {
+            Optional<TermId> sId = findTermId(t.getSubject(), dict, arena);
+            if (sId.isEmpty()) {
+                return Optional.empty();
+            }
+            Optional<TermId> pId = findTermId(t.getPredicate(), dict, arena);
+            if (pId.isEmpty()) {
+                return Optional.empty();
+            }
+            Optional<TermId> oId = findTermId(t.getObject(), dict, arena);
+            if (oId.isEmpty()) {
+                return Optional.empty();
+            }
+            return dict.findTermId(
+                    TermCodec.encodeQuotedTriple(sId.get(), pId.get(), oId.get(), true, arena));
+        }
         IRI customDt = customDatatype(v);
         if (customDt == null) {
             return dict.findTermId(TermEncoder.encode(v, arena));

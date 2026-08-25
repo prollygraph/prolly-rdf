@@ -30,7 +30,7 @@ public class ProllyRdfNotifyingStoreTest
     }
 
     // ---- Mirrors of ProllyRdfStoreContractTest's baselined architectural gaps (this suite
-    // extends the same RDFStoreTest, so the same two gaps surface here) ----
+    // extends the same RDFStoreTest, so the same gap surfaces here) ----
 
     @Override
     @org.junit.jupiter.api.Disabled(
@@ -38,13 +38,6 @@ public class ProllyRdfNotifyingStoreTest
                     + ">64KB need an out-of-line blob layer (TupleBuilder.java:79). Architectural —"
                     + " mirrored from ProllyRdfStoreContractTest.")
     public void testReallyLongLiteralRoundTrip() {}
-
-    @Override
-    @org.junit.jupiter.api.Disabled(
-            "RDF-star write-path wiring gap: TermCodec.encodeQuotedTriple exists but the sail's"
-                    + " encode path does not route Triple values through it (frontier row"
-                    + " 2026-08-25). Mirrored from ProllyRdfStoreContractTest.")
-    public void testAddTripleContext() {}
 
     @Override
     @org.junit.jupiter.api.Disabled(

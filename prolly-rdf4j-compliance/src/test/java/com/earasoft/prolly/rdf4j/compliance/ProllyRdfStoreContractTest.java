@@ -40,31 +40,12 @@ public class ProllyRdfStoreContractTest extends RDFStoreTest {
     }
 
     // ---- Known failures (baselined; see memory sail-contract-suite-findings) ----
+    // (2026-08-25 audit: testTimeZoneRoundTrip + testInvalidDateTime removed as STALE — fixed by
+    // ADR-0043 in June; testAddTripleContext removed when the RDF-star write-path wiring landed.)
 
     @Override
     @Disabled(
             "prolly Tuple offsets are uint16 → 65535-byte term cap; literals "
                     + ">64KB need an out-of-line blob layer (TupleBuilder.java:79). Architectural.")
     public void testReallyLongLiteralRoundTrip() {}
-
-    // testStatementSerialization was baselined here (ProllyValue wrapped a non-Serializable
-    // MemorySegment; RDF4J's Value extends Serializable) and is now FIXED (2026-06-22,
-    // compliance-suite-live-gate Step 3): the inherited test runs + passes. Fixed by a
-    // writeReplace()
-    // serialization proxy on the ProllyValue hierarchy + ProllyStatement (each returns its plain
-    // SimpleValueFactory equivalent). See bugs/rdf4j-repository-connection-contract-triage.md.
-
-    // testQueryBindings was baselined here ("pre-set bindings return 0 rows") and is now FIXED
-    // (2026-06-11, follow-ons Step 4): the inherited test runs + passes. The bug was a filter-only
-    // pre-set binding dropped at the low-level evaluate path; fixed by inlining initial bindings
-    // (BindingAssignerOptimizer) in ProllySailConnection.evaluateInternal.
-
-    @Override
-    @Disabled(
-            "RDF-star: a Triple used as a statement context — ProllySail's TermEncoder rejects a Triple "
-                    + "Value (it requires a Dictionary-allocated TermId via encodeQuotedTriple). Pre-existing "
-                    + "RDF-star Phase-2 gap (the flat sail's RocksDbFlatSailContractTest baselines the same test); "
-                    + "surfaced 2026-06-11 while running the full contract suite under the gate — verified by "
-                    + "git-stash to predate, and NOT caused by, the pre-set-bindings fix in the same change.")
-    public void testAddTripleContext() {}
 }

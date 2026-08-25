@@ -16,7 +16,6 @@
 package com.earasoft.prolly.rdf4j.gen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.dolthub.prolly.HeapBufferPool;
 import com.dolthub.prolly.InMemoryNodeStore;
@@ -37,19 +36,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Phase 1 Step 5 of {@code prolly-rdf4j-test-strategy.md} — <b>pins a gap the differential oracle
- * (S-2) found on its first run</b>: {@code ProllySail} cannot ingest an RDF-star statement whose
- * quoted triple was built by a <i>foreign</i> {@code ValueFactory} (here {@code
- * SimpleValueFactory}). The Sail's add-path hands the raw {@code SimpleTriple} to {@code
- * TermEncoder}, which requires the components already resolved to {@code TermId}s ("Triple requires
- * TermIds, use TermCodec.encodeQuotedTriple") — only {@code ProllyValueFactory.createTriple}
- * produces that. RDF4J's {@code MemoryStore} accepts any factory's values, so this is a real
- * RDF4J-contract divergence, tracked for the Phase-8 frontier (S-11).
- *
- * <p><b>This test documents the CURRENT behaviour, it does not bless it.</b> When the add-path
- * learns to recursively resolve a foreign quoted triple, the {@code assertThrows} flips to a
- * differential equality — delete it then and drop the {@code nonStar} restriction from {@link
- * OpStreamGen}.
+ * Phase 1 Step 5's gap pin, <b>flipped to a parity test</b> when the RDF-star write-path wiring
+ * landed (conformance round 3, 2026-08-25): {@code ProllySail} now ingests an RDF-star statement
+ * whose quoted triple was built by a <i>foreign</i> {@code ValueFactory} exactly like RDF4J's
+ * {@code MemoryStore} does — {@code DictionaryTermEncoder} recursively interns the triple's
+ * components, so no pre-resolved {@code TermId}s are required. The historical gap (the add-path
+ * handing a raw {@code SimpleTriple} to {@code TermEncoder}, which threw) is what the differential
+ * oracle (S-2) found on its very first run; per this file's own old instructions, the {@code
+ * assertThrows} flipped to acceptance and the differential generators dropped their star
+ * restriction ({@code QuadGen.differentialStatements} now generates quoted triples).
  */
 class RdfStarIngestGapTest {
 
@@ -59,7 +54,7 @@ class RdfStarIngestGapTest {
     private static final IRI B = VF.createIRI("urn:test:b");
 
     @Test
-    void memoryStoreAcceptsForeignRdfStar_prollySailDoesNot(@TempDir Path dir) {
+    void bothStoresAcceptForeignRdfStar(@TempDir Path dir) {
         Triple quoted = VF.createTriple(A, P, B); // a SimpleTriple — no TermIds
         Statement starStmt = VF.createStatement(quoted, P, B); // << quoted-triple subject
 
@@ -85,13 +80,14 @@ class RdfStarIngestGapTest {
                                 false));
         prolly.init();
         try (RepositoryConnection c = prolly.getConnection()) {
-            assertThrows(
-                    RuntimeException.class,
-                    () -> {
-                        c.add(starStmt);
-                        c.commit();
-                    },
-                    "ProllySail rejects a foreign-factory RDF-star quoted triple (tracked gap)");
+            c.add(starStmt);
+            c.commit();
+            assertEquals(
+                    1,
+                    c.size(),
+                    "ProllySail ingests a foreign-factory RDF-star quoted triple — the round-3"
+                            + " write-path wiring (DictionaryTermEncoder interns the components"
+                            + " recursively; no TermIds required up front)");
         } finally {
             prolly.shutDown();
         }
