@@ -8,6 +8,17 @@ supported transition. Entries below are release-level; day-to-day history is the
 
 ### Write path
 
+- **Dedupe hits ride the engine's per-run filters; lookup key blocks release on every path.**
+  The adversarial re-review of the presence-index round confirmed its claim over-reached:
+  the index accelerated ABSENT probes only, while a spilled dictionary's dedupe HITS (the
+  majority of bulk-encode traffic) still walked `O(runs)` run files — twice, via
+  `containsKey` + `get`. The engine now builds a Bloom filter per sealed run and collapses
+  the double walk into one three-way lookup, so a hit reads ~one run block; this entry's
+  predecessor's "amortized O(1) per term" is scoped accordingly (absent-side exact, hit-side
+  ~one probe, both budget-bounded with graceful degradation — see the engine CHANGELOG).
+  `Dictionary.findTermId`/`decode` also release their pool-borrowed key blocks in `finally`,
+  so a throwing spilled-run probe (an `UncheckedIOException` mid-walk) can no longer skip the
+  ADR-0062 D-4 release discipline.
 - **The dictionary enables the engine's presence index.** Encode's per-term dedup was measured
   `O(runs)` per first-encountered term once the staging buffer spilled — the quadratic
   bulk-encode wall (consumer trace: quarkus-ontology-editor, benchmarks

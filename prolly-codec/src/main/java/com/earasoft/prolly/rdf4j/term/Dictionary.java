@@ -113,10 +113,12 @@ public final class Dictionary {
      * {@code O(runs)} once the {@code SpillableSortedBuffer} spilled (plans/prolly-bulk-load.md
      * Step 4h / ADR-0061 D-3) — so bulk loads set it HIGH to keep the buffer in-heap at the cost of
      * heap proportional to distinct terms. Since {@link #newBuffer} enables the buffer's presence
-     * index, a SPILLED dictionary also encodes in amortized {@code O(1)} per term, and this knob
-     * demotes to ordinary heap-vs-disk tuning. Only the dictionary carries either concern — the
-     * index buffers are insert-only (no per-key dedup get), so they spill harmlessly at the
-     * default.
+     * index, a spilled dictionary's ABSENT probes (first encounters) answer O(1) from the index and
+     * its PRESENT probes (dedupe hits) read ~one run block via the per-run filters — both up to
+     * heap-aware byte budgets, degrading gracefully past them; loads far beyond any budget belong
+     * on a batched commit cadence. This knob thus demotes to ordinary heap-vs-disk tuning. Only the
+     * dictionary carries either concern — the index buffers are insert-only (no per-key dedup get),
+     * so they spill harmlessly at the default.
      */
     private static final long DICT_SPILL_BYTES = Long.getLong("prolly.tx.dict.spill.bytes", -1L);
 
@@ -229,11 +231,16 @@ public final class Dictionary {
             // this
             // is a get only (no put on this path), so MutableMap never retains the key. Release the
             // block,
-            // not the slice. A no-op under HeapBufferPool.
+            // not the slice — in a finally, since a spilled-run probe can throw
+            // (UncheckedIOException) and the release discipline must hold on that path too. A no-op
+            // under HeapBufferPool.
             MemorySegment keyBlock = pool.borrow(Int64Key.TUPLE_SIZE);
-            Optional<MemorySegment> existing =
-                    buffer.get(Int64Key.writeInto(keyBlock, tid.value()));
-            pool.release(keyBlock);
+            Optional<MemorySegment> existing;
+            try {
+                existing = buffer.get(Int64Key.writeInto(keyBlock, tid.value()));
+            } finally {
+                pool.release(keyBlock);
+            }
             if (existing.isEmpty()) {
                 // Empty slot at this salt means the term hasn't been inserted at
                 // this hash address. It might exist at a later salt (only if an
@@ -259,11 +266,16 @@ public final class Dictionary {
         // the
         // value. The returned value segment is independent of the key block (it comes from the
         // buffer's
-        // stored value, a heap copy), so releasing the key does not touch it. A no-op under
-        // HeapBufferPool.
+        // stored value, a heap copy), so releasing the key does not touch it — in a finally, since
+        // a spilled-run probe can throw and the release discipline must hold on that path too. A
+        // no-op under HeapBufferPool.
         MemorySegment keyBlock = pool.borrow(Int64Key.TUPLE_SIZE);
-        Optional<MemorySegment> v = buffer.get(Int64Key.writeInto(keyBlock, id.value()));
-        pool.release(keyBlock);
+        Optional<MemorySegment> v;
+        try {
+            v = buffer.get(Int64Key.writeInto(keyBlock, id.value()));
+        } finally {
+            pool.release(keyBlock);
+        }
         metrics.increment(v.isPresent() ? "dict.decode.hit" : "dict.decode.miss");
         return v;
     }
