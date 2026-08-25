@@ -238,8 +238,7 @@ class SpocKeyTest {
         assertEquals(SpocKey.TUPLE_SIZE, seg.byteSize());
         byte[] backing =
                 (byte[])
-                        seg.heapBase()
-                                .orElseThrow(() -> new AssertionError("heap-backed segment"));
+                        seg.heapBase().orElseThrow(() -> new AssertionError("heap-backed segment"));
         assertEquals(SpocKey.TUPLE_SIZE, backing.length, "no bucket floor on retained keys");
     }
 }

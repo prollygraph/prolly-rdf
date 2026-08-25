@@ -54,6 +54,17 @@ final class ScopeTrackingPool implements BufferPool {
         return underlying.borrow(size);
     }
 
+    // Forwarded, not defaulted: the interface default routes borrowRetained
+    // through THIS decorator's borrow -> underlying.borrow, silently swapping
+    // the production pool's exact-size retained allocation for the bucketed
+    // scratch path — the parity instrument would then exercise a non-production
+    // shape, the precise failure mode the parity registry exists to prevent.
+    @Override
+    public MemorySegment borrowRetained(int size) {
+        sharedBorrows.incrementAndGet();
+        return underlying.borrowRetained(size);
+    }
+
     @Override
     public BufferPool newTransactionScope() {
         scopesCreated.incrementAndGet();
@@ -64,6 +75,11 @@ final class ScopeTrackingPool implements BufferPool {
             @Override
             public MemorySegment borrow(int size) {
                 return child.borrow(size);
+            }
+
+            @Override
+            public MemorySegment borrowRetained(int size) {
+                return child.borrowRetained(size);
             }
 
             @Override

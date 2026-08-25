@@ -107,13 +107,16 @@ public final class Dictionary {
     }
 
     /**
-     * The encode-dedup buffer for a base. A bulk load sets {@code prolly.tx.dict.spill.bytes} HIGH
-     * to keep this buffer in-heap: {@link #encode}'s per-term {@code get} is {@code O(runs)} once
-     * the {@code SpillableSortedBuffer} has spilled (the build-once encode wall —
-     * plans/prolly-bulk-load.md Step 4h / ADR-0061 D-3), but {@code O(log n)} in-heap. Unset
-     * ({@code <= 0}) keeps the normal {@code prolly.tx.spill.bytes} default, so the interactive
-     * path is unchanged. Only the dictionary needs this — the index buffers are insert-only (no
-     * per-key dedup get), so they spill harmlessly.
+     * Per-dictionary spill threshold override ({@code prolly.tx.dict.spill.bytes}; {@code <= 0}
+     * keeps the normal {@code prolly.tx.spill.bytes} default). HISTORICALLY this was the only
+     * escape from the build-once encode wall — {@link #encode}'s per-term dedup {@code get} was
+     * {@code O(runs)} once the {@code SpillableSortedBuffer} spilled (plans/prolly-bulk-load.md
+     * Step 4h / ADR-0061 D-3) — so bulk loads set it HIGH to keep the buffer in-heap at the cost of
+     * heap proportional to distinct terms. Since {@link #newBuffer} enables the buffer's presence
+     * index, a SPILLED dictionary also encodes in amortized {@code O(1)} per term, and this knob
+     * demotes to ordinary heap-vs-disk tuning. Only the dictionary carries either concern — the
+     * index buffers are insert-only (no per-key dedup get), so they spill harmlessly at the
+     * default.
      */
     private static final long DICT_SPILL_BYTES = Long.getLong("prolly.tx.dict.spill.bytes", -1L);
 

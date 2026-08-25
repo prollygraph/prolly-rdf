@@ -155,8 +155,8 @@ class Int64KeyTest {
     /**
      * CANONICALITY — the presence-index contract, pinned where it is relied on: the dictionary
      * enables {@code SpillableSortedBuffer}'s presence index, whose absent answers are sound only
-     * if comparator-equal keys are byte-identical. For this fixed-width single-column layout,
-     * equal values through independent builds must produce byte-identical tuples.
+     * if comparator-equal keys are byte-identical. For this fixed-width single-column layout, equal
+     * values through independent builds must produce byte-identical tuples.
      */
     @Test
     void equal_values_build_byte_identical_tuples() {

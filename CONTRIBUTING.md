@@ -25,8 +25,9 @@ when it fails:
 | CycloneDX | supply-chain inventory (`target/bom.json` per module) | it emits, never fails |
 
 Ported-from-Dolt files keep their original DoltHub header — never relicense a ported
-file by rewriting its header (`build/dolt-provenance-ledger.md` is the provenance
-record; the header templates live in `build/`).
+file by rewriting its header (the provenance record is the engine ring's
+`dolt-provenance-ledger.md`, under prolly-core's build directory; this repo's
+header templates live in `build/`).
 
 ## Tests
 
@@ -98,7 +99,7 @@ Fixtures arrive via Eclipse's published `rdf4j-*-testsuite` artifacts (none embe
 The known-failures baseline under
 `prolly-rdf4j-compliance/src/test/resources/known-failures/` is the ratchet described
 above; the categorized view of every accepted failure is
-[`docs/conformance-frontier.md`](prolly-rdf4j-compliance/docs/conformance-frontier.md).
+[`prolly-rdf4j-compliance/docs/conformance-frontier.md`](prolly-rdf4j-compliance/docs/conformance-frontier.md).
 
 ## Reporting issues
 

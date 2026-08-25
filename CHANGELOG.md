@@ -6,6 +6,24 @@ supported transition. Entries below are release-level; day-to-day history is the
 
 ## Unreleased
 
+### Write path
+
+- **The dictionary enables the engine's presence index.** Encode's per-term dedup was measured
+  `O(runs)` per first-encountered term once the staging buffer spilled — the quadratic
+  bulk-encode wall (consumer trace: quarkus-ontology-editor, benchmarks
+  `ncit-runs/one-flush-probe.txt`, jstack-pinned to the run-file probes). The dictionary's
+  Int64 keys are canonical (equal values build byte-identical tuples, pinned in
+  `Int64KeyTest`), satisfying the index's soundness contract; a spilled dictionary now encodes
+  in amortized O(1) per term and `prolly.tx.dict.spill.bytes` demotes from the only escape
+  hatch to a tuning knob. The rebase construction routes through `newBuffer` so post-flush
+  dictionaries keep the same properties.
+- **Retained staged keys allocate exact-size.** `SpocKey`/`Int64Key` `toTupleSegment` switch
+  to the engine's new `borrowRetained`: keys held in `MutableMap.edits` until flush stop
+  paying the heap pool's 1 KiB bucket floor (24× per 42-byte quad key, ~85× per 12-byte dict
+  key — the consumer's bulk-ingest `OutOfMemoryError`, trace `e2e-one-flush.txt` run 4).
+  Backing-array-size tests pin both; the `ScopeTrackingPool` parity instrument forwards
+  `borrowRetained` so the scope net exercises the production allocation shape.
+
 ### Scope
 
 - **The twelve prolly-json architecture decision records moved out** to the
