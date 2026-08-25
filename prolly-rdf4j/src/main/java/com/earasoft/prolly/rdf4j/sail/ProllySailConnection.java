@@ -56,8 +56,6 @@ import org.eclipse.rdf4j.query.algebra.QueryRoot;
 import org.eclipse.rdf4j.query.algebra.TupleExpr;
 import org.eclipse.rdf4j.query.algebra.evaluation.EvaluationStrategy;
 import org.eclipse.rdf4j.query.algebra.evaluation.TripleSource;
-import org.eclipse.rdf4j.query.algebra.evaluation.impl.DefaultEvaluationStrategy;
-import org.eclipse.rdf4j.query.algebra.evaluation.optimizer.BindingAssignerOptimizer;
 import org.eclipse.rdf4j.sail.SailException;
 import org.eclipse.rdf4j.sail.UpdateContext;
 import org.eclipse.rdf4j.sail.helpers.AbstractNotifyingSailConnection;
@@ -180,6 +178,17 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
     private long addedSinceFlush;
 
     private long removedSinceFlush;
+
+    /**
+     * Whether THIS transaction added/removed any statement — the flags behind the sail-level {@code
+     * SailChangedEvent} fired on commit ({@code SailChangedListener}s registered on the sail, e.g.
+     * RDF4J's notifying-store contract, hear about data changes through it; the per-statement
+     * {@code notifyStatementAdded/Removed} connection-listener channel is separate and already
+     * wired). Reset on begin/rollback and after the commit-time fire.
+     */
+    private boolean txStatementsAdded;
+
+    private boolean txStatementsRemoved;
 
     /**
      * Whether this connection currently holds the Sail write lock (acquired in {@link
@@ -432,6 +441,8 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
 
     @Override
     protected void startTransactionInternal() throws SailException {
+        txStatementsAdded = false;
+        txStatementsRemoved = false;
         // #143 — acquire the sail's write lock to enforce v2.0 single-writer.
         // Two concurrent /sparql/update connections must serialize end-to-end,
         // otherwise both fork from the same dictRoot, both advance it on
@@ -622,6 +633,15 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
             }
             addedSinceFlush = 0;
             removedSinceFlush = 0;
+            if (txStatementsAdded || txStatementsRemoved) {
+                org.eclipse.rdf4j.sail.helpers.DefaultSailChangedEvent changed =
+                        new org.eclipse.rdf4j.sail.helpers.DefaultSailChangedEvent(sail);
+                changed.setStatementsAdded(txStatementsAdded);
+                changed.setStatementsRemoved(txStatementsRemoved);
+                txStatementsAdded = false;
+                txStatementsRemoved = false;
+                sail.fireSailChanged(changed);
+            }
         } catch (RuntimeException e) {
             LOG.error(
                     "[{}] commit failed after {} added / {} removed",
@@ -638,6 +658,8 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
 
     @Override
     protected void rollbackInternal() throws SailException {
+        txStatementsAdded = false;
+        txStatementsRemoved = false;
         // Re-fork from sail's current committed roots. Buffered mutations are
         // discarded; Sail-level state was never touched.
         LOG.info(
@@ -710,23 +732,32 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
         // listener is actually registered (the cheap hasConnection
         // Listeners() check guards the per-statement allocation in
         // the listener-less common case).
+        // Connection-listener notifications must be CHANGE-ACCURATE (the
+        // NotifyingSail contract RDF4J's stores implement: no event for a
+        // no-op re-add — surfaced by RDFNotifyingStoreTest, 2026-08-25). The
+        // presence probe runs ONLY when a listener is registered, so the
+        // listener-less hot path pays exactly the boolean check it always did.
         boolean notify = hasConnectionListeners();
         if (ctxs.length == 0 || (ctxs.length == 1 && ctxs[0] == null)) {
+            boolean fresh = !notify || !statementPresent(s, p, o, null);
             long tIns = System.nanoTime();
             insertEverywhere(sId, pId, oId, TermId.ZERO);
             m.timer("sail.add.insert").record(System.nanoTime() - tIns, TimeUnit.NANOSECONDS);
             addedSinceFlush++;
-            if (notify) {
+            txStatementsAdded = true;
+            if (notify && fresh) {
                 notifyStatementAdded(sail.getValueFactory().createStatement(s, p, o));
             }
         } else {
             for (Resource ctx : ctxs) {
+                boolean fresh = !notify || !statementPresent(s, p, o, ctx);
                 TermId cId = ctx == null ? TermId.ZERO : encodeTerm(ctx);
                 long tIns = System.nanoTime();
                 insertEverywhere(sId, pId, oId, cId);
                 m.timer("sail.add.insert").record(System.nanoTime() - tIns, TimeUnit.NANOSECONDS);
                 addedSinceFlush++;
-                if (notify) {
+                txStatementsAdded = true;
+                if (notify && fresh) {
                     notifyStatementAdded(sail.getValueFactory().createStatement(s, p, o, ctx));
                 }
             }
@@ -812,6 +843,7 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
                             st.getContext() == null ? TermId.ZERO : encodeTerm(st.getContext());
                     deleteEverywhere(sId, pId, oId, cId);
                     removedSinceFlush++;
+                    txStatementsRemoved = true;
                     if (notify) notifyStatementRemoved(st);
                 }
             }
@@ -825,25 +857,45 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
         // branch above. So the only default-graph fast path left is an explicit
         // single {null}; do NOT re-add `ctxs.length == 0` here (that was the bug).
         if (ctxs.length == 1 && ctxs[0] == null) {
+            boolean existed = notify && statementPresent(s, p, o, null);
             deleteEverywhere(sId, pId, oId, TermId.ZERO);
             removedSinceFlush++;
-            if (notify) {
+            txStatementsRemoved = true;
+            if (existed) {
                 notifyStatementRemoved(sail.getValueFactory().createStatement(s, p, o));
             }
         } else {
             for (Resource ctx : ctxs) {
+                boolean existed = notify && statementPresent(s, p, o, ctx);
                 TermId cId = ctx == null ? TermId.ZERO : encodeTerm(ctx);
                 deleteEverywhere(sId, pId, oId, cId);
                 removedSinceFlush++;
-                if (notify) {
+                txStatementsRemoved = true;
+                if (existed) {
                     notifyStatementRemoved(sail.getValueFactory().createStatement(s, p, o, ctx));
                 }
             }
         }
     }
 
+    /**
+     * Is the exact statement visible to THIS transaction right now ({@code ctx == null} = the
+     * default graph only)? The change-accuracy probe behind listener notifications — called only
+     * when a connection listener is registered.
+     */
+    private boolean statementPresent(Resource s, IRI p, Value o, @Nullable Resource ctx) {
+        try (var it = getStatementsInternal(s, p, o, false, new Resource[] {ctx})) {
+            return it.hasNext();
+        }
+    }
+
     @Override
     protected void clearInternal(Resource... ctxs) throws SailException {
+        // clear() removes statements: the commit-time SailChangedEvent must say so,
+        // and registered connection listeners hear each actually-removed statement
+        // (change-accurate by construction — the scan only yields what exists).
+        txStatementsRemoved = true;
+        boolean notify = hasConnectionListeners();
         try (var it = getStatementsInternal(null, null, null, false, ctxs)) {
             while (it.hasNext()) {
                 Statement st = it.next();
@@ -852,6 +904,7 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
                 TermId oId = encodeTerm(st.getObject());
                 TermId cId = st.getContext() == null ? TermId.ZERO : encodeTerm(st.getContext());
                 deleteEverywhere(sId, pId, oId, cId);
+                if (notify) notifyStatementRemoved(st);
             }
         }
     }
@@ -1084,24 +1137,10 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
             throws SailException {
         // Wrap the parsed TupleExpr so the optimizer can replace the root if needed.
         TupleExpr root = (expr instanceof QueryRoot) ? expr : new QueryRoot(expr);
-        // Inline any pre-set bindings into the algebra (RDF4J's BindingAssigner). Without this, a
-        // binding
-        // on a variable that appears ONLY in a FILTER (not the basic graph pattern) is dropped, so
-        // the
-        // filter sees it unbound and the query yields 0 rows. RDF4J's own SailSourceConnection
-        // avoids this
-        // by running the optimizer pipeline (which inlines bindings) before evaluate; we do the
-        // targeted
-        // inline. Clone first: the optimizer mutates the tree, and a caller may reuse its TupleExpr
-        // across
-        // evaluate() calls (RDFStoreTest.testQueryBindings does exactly that — mutating it in place
-        // would
-        // corrupt later calls). Guarded on non-empty bindings, so the common empty-bindings path is
-        // byte-for-byte unchanged. (prolly-rdf4j-test-strategy-followons Step 4.)
-        if (!bindings.isEmpty()) {
-            root = root.clone();
-            new BindingAssignerOptimizer().optimize(root, dataset, bindings);
-        }
+        // Clone before optimizing: the pipeline mutates the tree, and a caller
+        // may reuse its TupleExpr across evaluate() calls (RDFStoreTest's
+        // testQueryBindings does exactly that).
+        root = root.clone();
         TripleSource tripleSource =
                 new SailConnectionTripleSource(this, sail.getValueFactory(), includeInferred);
         // Read-path opt-in (plans/join-approaches-benchmark.md): memoize the acyclic bind-join's
@@ -1115,16 +1154,40 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
                             tripleSource, sail.meterRegistry(), 4096, 100_000, 256_000L);
         }
         // Phase 0 seam (plans/triejoin-evaluation-wiring.md): when the flag is on, run through
-        // ProllySail's
-        // own strategy (the future home of cyclic-BGP → WCOJ-triejoin routing); otherwise the stock
-        // default.
-        // Inert today — ProllyEvaluationStrategy overrides nothing yet, so both paths produce
-        // identical results.
+        // ProllySail's own strategy (cyclic-BGP → WCOJ-triejoin routing); otherwise the shared
+        // Prolly default. BOTH extend ProllyDefaultEvaluationStrategy, so this store's
+        // conformance corrections (the graph-scoped zero-length-path walk, W3C pp35) apply
+        // identically with the flag on or off.
         EvaluationStrategy strategy =
                 sail.triejoinEnabled()
                         ? new ProllyEvaluationStrategy(tripleSource, dataset, this)
-                        : new DefaultEvaluationStrategy(tripleSource, dataset, null);
+                        : new ProllyDefaultEvaluationStrategy(tripleSource, dataset, this);
+        // Honor the sail-level QueryEvaluationMode exactly as the stock
+        // SailSourceConnection does. AbstractSail defaults to STRICT while
+        // DefaultEvaluationStrategy's own constructor defaults to STANDARD, so
+        // omitting this silently evaluated in the WRONG compliance mode —
+        // incomparable-literal comparisons returned false instead of raising
+        // the type error SPARQL requires (W3C date-3/open-cmp-01/02 and the
+        // CascadeValueException contract, all caught by the 2026-08-25
+        // gap-wiring round).
+        strategy.setQueryEvaluationMode(sail.getDefaultQueryEvaluationMode());
         try {
+            // Run RDF4J's STANDARD optimizer pipeline exactly as the stock
+            // SailSourceConnection does (BindingAssigner, ConstantOptimizer,
+            // QueryJoinOptimizer, ...). Skipping it did not just cost speed —
+            // it evaluated algebra shapes no stock store ever executes raw,
+            // and some are latently broken upstream: Join(GRAPH ?g {..},
+            // {..} UNION {..}) drops the union's rows unless the join
+            // optimizer reorders it (W3C join-combo-1/-2, caught by the
+            // 2026-08-25 gap-wiring round; the reordered plan every other
+            // RDF4J store runs is correct). Uniform-cost statistics: this
+            // store keeps no cardinality estimates yet.
+            root =
+                    strategy.optimize(
+                            root,
+                            new org.eclipse.rdf4j.query.algebra.evaluation.impl
+                                    .EvaluationStatistics(),
+                            bindings);
             return strategy.evaluate(root, bindings);
         } catch (org.eclipse.rdf4j.query.QueryEvaluationException e) {
             throw new SailException(e);

@@ -1,0 +1,20 @@
+# W3C SPARQL 1.0 (DAWG) query conformance — known-failures baseline.
+# Wired 2026-08-25 (gap-wiring round). Same ratchet as sparql11-query.txt: a
+# test NOT listed here that starts failing fails the build; fixed entries are
+# deleted and the cap in KnownFailuresBaselineTest drops.
+#
+# --- Category: engine-independent (reference implementation fails identically) ---
+# The DAWG dataset-* tests carry their datasets in the QUERY's FROM/FROM NAMED
+# clauses (no manifest data), so passing requires the engine to dereference
+# document IRIs — the same family as constructwhere04 in the 1.1 suite. RDF4J's
+# own MemoryStore fails ALL EIGHT identically under this harness (parity probe,
+# 2026-08-25); FROM-document dereferencing is implementation-defined per SPARQL
+# and an SSRF-shaped non-feature inside a store by deliberate ruling.
+dataset-01
+dataset-03
+dataset-05
+dataset-06
+dataset-07
+dataset-08
+dataset-11
+dataset-12b

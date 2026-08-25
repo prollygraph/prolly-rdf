@@ -18,17 +18,21 @@ Three categories:
 - **unimplemented** — a genuine feature gap with no architectural blocker. A candidate for a real fix; a
   test (not a feature epic) usually closes it.
 
-## SPARQL 1.1 *query* — baselined in `known-failures/sparql11-query.txt` (2)
+## SPARQL 1.1 *query* — baselined in `known-failures/sparql11-query.txt` (1)
 
-Baseline captured 2026-05-15 at **171/176**; **SHRUNK 2026-06-12 to 174/176** when the term-faithful
-campaign (ADR-0043) fixed **three** of the five — `TZ()`, `TIMEZONE()`, and `tsv03` (see the *Fixed* note
-below). The *update* suite stays **90/90**. The two genuine remaining failures are unimplemented features,
-not encoding gaps:
+Baseline captured 2026-05-15 at **171/176**; SHRUNK 2026-06-12 to 174/176 (ADR-0043, the term-faithful
+campaign); **SHRUNK 2026-08-25 to 175/176** when the conformance round 2 fixed `pp35` (see *Fixed*
+below). The *update* suite stays **90/90**. The one remaining entry is not a prolly gap at all:
 
 | Test (`mf:name`) | Category | Roadmap / ruling | Rationale |
 |---|---|---|---|
-| `constructwhere04 - CONSTRUCT WHERE` | unimplemented | candidate fix: wire `FROM`-document resolution through the Sail | `CONSTRUCT WHERE` with a `FROM` `DatasetClause` — `FROM`-document resolution is not wired through the Sail. |
-| `(pp35) Named Graph 2` | unimplemented | feature backlog: property paths across named graphs | Property-path evaluation across named graphs is not implemented. |
+| `constructwhere04 - CONSTRUCT WHERE` | **engine-independent** | ruled out (revisit only if upstream moves — `FrontierEngineIndependenceTest` re-verifies every build) | The manifest declares NO data; passing requires the engine to dereference the query's own `FROM <data.ttl>` document IRI. RDF4J's MemoryStore fails byte-for-byte identically under this harness; dereferencing is implementation-defined per SPARQL 1.1 and an SSRF-shaped non-feature inside a store by deliberate ruling. |
+
+**Fixed 2026-08-25 by conformance round 2 (`QUERY_MAX` 2→1):**
+
+| Test (`mf:name`) | What fixed it |
+|---|---|
+| `(pp35) Named Graph 2` | Upstream evaluates property paths under an unbound `GRAPH ?g` with graph-blind global dedup (`ZeroLengthPathIteration` keys vertices, `PathIteration` keys `(start,end)` pairs — both without the graph), so a term in several named graphs kept rows only for the first graph the scan surfaced; memory store passes by insertion-order luck, this store's content-addressed order lost the rows. `ProllyDefaultEvaluationStrategy` now walks zero-length vertices per `(vertex, graph)` and decomposes both-ends-unbound `ArbitraryLengthPath`s per named graph. Pinned by `ZeroLengthPathNamedGraphTest`. |
 
 **Fixed 2026-06-12 by the term-faithful campaign (ADR-0043), removed from the baseline + `QUERY_MAX` 5→2:**
 
@@ -78,3 +82,54 @@ SPARQL baselines above are the file-backed, gated ones.
 When you fix a known failure: delete its line from the `known-failures/*.txt` baseline **and** its row
 here, and lower the pinned cap in `KnownFailuresBaselineTest` to match. The cap going down is the visible
 record that the frontier shrank.
+
+## SPARQL 1.0 (DAWG) *query* — baselined in `known-failures/sparql10-query.txt` (8) — NEW 2026-08-25
+
+Wired by the gap-wiring round at **228/236 evaluated** (upstream additionally ignores six
+RDF-1.1-incompatible tests). All eight baselined entries are the `dataset-*` family: their datasets
+live in the query's own FROM/FROM NAMED clauses (no manifest data), the same engine-independent
+family as `constructwhere04` — RDF4J's MemoryStore fails all eight identically.
+`Sparql10DatasetEngineIndependenceTest` re-verifies the parity every build; the cap is
+`KnownFailuresBaselineTest.QUERY10_MAX`.
+
+## The gap-wiring round (2026-08-25) — what it found and fixed
+
+Wiring every applicable RDF4J testsuite class that existed in the dependency but was never
+subclassed surfaced FOUR real defects, all fixed the same round:
+
+1. **Wrong `QueryEvaluationMode`.** `AbstractSail` defaults to STRICT and stock connections
+   propagate it; our `evaluateInternal` never set it, silently evaluating in STANDARD. Fixed by
+   honoring the sail default (one line). Caught by `CascadeValueExceptionTest` + W3C
+   `date-3`/`open-cmp-01/02`.
+2. **Missing optimizer pipeline.** We ran only a targeted BindingAssigner; stock stores run the
+   standard pipeline. Skipping it evaluated algebra shapes no stock store executes raw — and
+   `Join(GRAPH ?g {..}, {..} UNION {..})` drops the union's rows in that raw shape (W3C
+   `join-combo-1/-2`). Fixed by running `strategy.optimize(...)` with uniform-cost statistics,
+   exactly as `SailSourceConnection` does.
+3. **No sail-level change events.** `SailChangedListener`s never heard commits. Fixed:
+   per-transaction add/remove flags fire a `DefaultSailChangedEvent` on commit. Caught by
+   `RDFNotifyingStoreTest`.
+4. **Notifications weren't change-accurate.** Connection listeners heard no-op re-adds and
+   phantom removes. Fixed: presence-probed notifications (probe runs only when a listener is
+   registered — the listener-less hot path is untouched).
+
+It also caught **two stale `@Disabled` baselines** in the store contract suite (`testTimeZoneRoundTrip`,
+`testInvalidDateTime` — both actually fixed by ADR-0043 back in June; the `@Disabled` set has no
+must-shrink gate, unlike the file-backed baselines) — both re-enabled and passing.
+
+Newly wired, all green: `SPARQL11SyntaxComplianceTest` (160 parser tests), `SPARQL10QueryComplianceTest`
+(228), `SparqlDatasetTest`, `SparqlSetBindingTest`, `SparqlAggregatesTest`, `SparqlOrderByTest`,
+`SparqlRegexTest`, `GraphQueryResultTest`, `TupleQueryResultTest`, `CascadeValueExceptionTest`,
+`SPARQLUpdateTest`, `SailInterruptTest`, `RDFNotifyingStoreTest`, `RDFStarSupportTest` (2 green,
+8 `@Disabled` on the star write-path gap), `SPARQL12QueryComplianceTest` (0 tests generated by
+upstream 5.1.4 — wired so coverage arrives with the upgrade).
+
+**New frontier rows from the round:**
+
+| Gap | Category | Roadmap / ruling |
+|---|---|---|
+| RDF-star triple terms in the write path | unimplemented | `TermCodec.encodeQuotedTriple` exists; `DictionaryTermEncoder` never routes `Triple` values through it. The 8 `@Disabled` tests in `ProllyRdfStarSupportTest` are the acceptance tests. |
+| Per-row update realization | architectural (parked) | `AbstractSailConnection` batches DELETE-then-INSERT realization, so change-accurate listeners emit one event per NET change; `RDFNotifyingStoreTest.testUpdateQuery2` pins SailSourceConnection's per-row interleaved trace. Semantics correct, cardinality differs. |
+| Cross-connection visibility | architectural (documented cluster) | Snapshot-per-connection isolation; two more faces surfaced (`SPARQLUpdateTest.testAutoCommitHandling`, `RDFNotifyingStoreTest.testUpdateQuery`'s final assert), `@Disabled` with the cluster rationale. |
+| `EvaluationStrategyTest` / optimistic-isolation suites | not wireable | Require `BaseSailConfig`/config-factory machinery this sail does not expose; revisit if a config layer lands. |
+| Cardinality-aware `EvaluationStatistics` | performance (parked) | The pipeline runs with uniform costs; `TermStats` could feed real cardinalities into join reordering. |

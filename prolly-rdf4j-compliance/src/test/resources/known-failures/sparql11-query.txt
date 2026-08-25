@@ -11,12 +11,26 @@
 # "FIXED" note at the bottom. See also ComplianceFailureListener, which writes
 # the live failure set to target/compliance-failures.txt.
 
-# --- Category B: unimplemented feature ---
-# CONSTRUCT WHERE with a FROM DatasetClause — FROM-document resolution is not
-# wired through the Sail. Candidate for a real fix; see memory.
+# --- Category: engine-independent (reference implementation fails identically) ---
+# CONSTRUCT WHERE with a FROM-only DatasetClause: the manifest declares NO data,
+# so the harness loads nothing and the query's own FROM <data.ttl> would require
+# the ENGINE to dereference the document IRI. No RDF4J store does that (RDF4J's
+# own MemoryStore fails this test byte-for-byte identically under this harness —
+# pinned by FrontierEngineIndependenceTest), dereferencing is implementation-
+# defined per SPARQL 1.1 §13/18, and silent IRI fetching inside a store is an
+# SSRF-shaped non-feature by deliberate ruling. Stays baselined as long as the
+# reference implementation agrees.
 constructwhere04 - CONSTRUCT WHERE
-# Property-path evaluation across named graphs.
-(pp35) Named Graph 2
+
+# --- FIXED 2026-08-25 by the graph-scoped path evaluation (conformance round 2) ---
+# (pp35) Named Graph 2: upstream evaluates paths under an unbound GRAPH ?g with
+#   graph-blind dedup (ZeroLengthPathIteration keys vertices, PathIteration keys
+#   (start,end) pairs — both without the graph), so a term in several named
+#   graphs kept rows only for whichever graph the scan surfaced first; RDF4J's
+#   memory store passes by insertion-order luck, this store's content-addressed
+#   order lost the ng-01 rows. ProllyDefaultEvaluationStrategy now walks
+#   zero-length vertices per (vertex, graph) and decomposes both-ends-unbound
+#   ArbitraryLengthPaths per named graph. Pinned by ZeroLengthPathNamedGraphTest.
 
 # --- FIXED by the term-faithful campaign (ADR-0043), removed from the baseline 2026-06-12 ---
 # TZ() / TIMEZONE(): the old fixed-width temporal encoding had no tz-absent slot, so a

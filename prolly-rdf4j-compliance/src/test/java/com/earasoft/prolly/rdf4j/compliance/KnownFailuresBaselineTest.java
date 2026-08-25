@@ -48,11 +48,18 @@ class KnownFailuresBaselineTest {
      * docs/conformance-frontier.md}.
      */
     private static final int QUERY_MAX =
-            2; // shrunk 5→2 on 2026-06-12: the term-faithful campaign (ADR-0043) fixed
+            1; // shrunk 5→2 on 2026-06-12 (ADR-0043 fixed TZ()/TIMEZONE() + tsv03);
 
-    // TZ()/TIMEZONE() + tsv03
+    // shrunk 2→1 on 2026-08-25 (graph-scoped path evaluation fixed pp35)
 
     private static final int UPDATE_MAX = 0;
+
+    /**
+     * SPARQL 1.0 (DAWG) baseline cap — eight dataset-* tests whose datasets live in the query's
+     * FROM/FROM NAMED clauses (engine-independent: the MemoryStore parity probe fails all eight
+     * identically; see the baseline file's header). Shrinks like QUERY_MAX.
+     */
+    private static final int QUERY10_MAX = 8;
 
     @Test
     void query_baseline_may_only_shrink() {
@@ -81,5 +88,19 @@ class KnownFailuresBaselineTest {
                         + " (the update suite is 90/90 clean). "
                         + "Entries: "
                         + baseline);
+    }
+
+    @org.junit.jupiter.api.Test
+    void sparql10BaselineWithinCap() {
+        java.util.List<String> baseline = KnownFailures.load("/known-failures/sparql10-query.txt");
+        org.junit.jupiter.api.Assertions.assertTrue(
+                baseline.size() <= QUERY10_MAX,
+                "sparql10-query baseline has "
+                        + baseline.size()
+                        + " entries, cap is "
+                        + QUERY10_MAX
+                        + " — a NEW SPARQL 1.0 conformance gap; raise QUERY10_MAX deliberately"
+                        + " (and update known-failures/sparql10-query.txt's header) or fix the"
+                        + " regression.");
     }
 }

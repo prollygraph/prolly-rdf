@@ -47,19 +47,6 @@ public class ProllyRdfStoreContractTest extends RDFStoreTest {
                     + ">64KB need an out-of-line blob layer (TupleBuilder.java:79). Architectural.")
     public void testReallyLongLiteralRoundTrip() {}
 
-    @Override
-    @Disabled(
-            "v2.0 xsd:date encoding has no timezone field; a timezoned xsd:date "
-                    + "is rejected outright (TermEncoder.requireNoTimezone).")
-    public void testTimeZoneRoundTrip() {}
-
-    @Override
-    @Disabled(
-            "TermEncoder eagerly parses typed literals and throws on a "
-                    + "non-conformant lexical form; RDF permits ill-typed literals. "
-                    + "Needs the opaque/custom-literal fallback (same gap as xsd:negativeInteger).")
-    public void testInvalidDateTime() {}
-
     // testStatementSerialization was baselined here (ProllyValue wrapped a non-Serializable
     // MemorySegment; RDF4J's Value extends Serializable) and is now FIXED (2026-06-22,
     // compliance-suite-live-gate Step 3): the inherited test runs + passes. Fixed by a

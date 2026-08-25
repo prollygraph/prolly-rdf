@@ -70,13 +70,13 @@ import org.jspecify.annotations.Nullable;
  * seam test and (Phase 3) the W3C suite with the flag on. MVP: default-graph BGPs (D-7); the
  * patterns' {@code c} is {@code null} → the {@code TermId.ZERO} default-graph context.
  */
-public final class ProllyEvaluationStrategy extends DefaultEvaluationStrategy {
+public final class ProllyEvaluationStrategy extends ProllyDefaultEvaluationStrategy {
 
     private final ProllySailConnection conn;
 
     public ProllyEvaluationStrategy(
             TripleSource tripleSource, Dataset dataset, ProllySailConnection conn) {
-        super(tripleSource, dataset, null);
+        super(tripleSource, dataset, conn);
         this.conn = conn;
     }
 

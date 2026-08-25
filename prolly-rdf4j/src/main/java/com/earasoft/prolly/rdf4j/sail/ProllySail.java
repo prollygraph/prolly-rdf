@@ -95,6 +95,15 @@ import org.slf4j.LoggerFactory;
  */
 public class ProllySail extends AbstractNotifyingSail implements VersionedSail {
 
+    /**
+     * Package hook: lets the connection fire the sail-level {@link
+     * org.eclipse.rdf4j.sail.SailChangedEvent} on commit ({@code notifySailChanged} is protected on
+     * {@link AbstractNotifyingSail}).
+     */
+    void fireSailChanged(org.eclipse.rdf4j.sail.SailChangedEvent event) {
+        notifySailChanged(event);
+    }
+
     private static final Logger LOG = LoggerFactory.getLogger(ProllySail.class);
 
     // Pre-built schemas for each table — used by auto-restore to rehydrate StaticMaps from raw

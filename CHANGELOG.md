@@ -6,6 +6,26 @@ supported transition. Entries below are release-level; day-to-day history is the
 
 ## Unreleased
 
+### Conformance
+
+- **SPARQL conformance round 2 — two frontier fixes, four defects the gap-wiring surfaced, and
+  ~1,000 newly wired contract tests.** W3C `(pp35) Named Graph 2` fixed (graph-scoped
+  zero-length-path walk + per-named-graph decomposition of both-ends-unbound property paths in
+  `ProllyDefaultEvaluationStrategy` — upstream's graph-blind path dedup loses rows under this
+  store's content-addressed enumeration order; memory store passes by insertion-order luck);
+  `constructwhere04` reclassified engine-independent (RDF4J's MemoryStore fails identically —
+  `FrontierEngineIndependenceTest` re-verifies the parity every build). Wiring every applicable
+  RDF4J testsuite class found and fixed: the sail evaluated in the WRONG `QueryEvaluationMode`
+  (STANDARD instead of the sail-level STRICT default — incomparable-literal comparisons returned
+  false instead of type errors); the standard optimizer pipeline was never run (and
+  `Join(GRAPH ?g {…}, {…} UNION {…})` drops rows in the un-reordered raw shape — W3C
+  `join-combo-1/-2`); sail-level `SailChangedEvent`s never fired; connection-listener
+  notifications weren't change-accurate. SPARQL 1.1 query now 175/176 on all three evaluation
+  variants (the one remaining entry is the engine-independent `constructwhere04`), update 90/90,
+  syntax 160/160, SPARQL 1.0 wired at 228/236 with the eight query-carried-dataset tests
+  baselined engine-independent (`Sparql10DatasetEngineIndependenceTest` guards the parity).
+  Full inventory: `prolly-rdf4j-compliance/docs/conformance-frontier.md`.
+
 ### Write path
 
 - **Dedupe hits ride the engine's per-run filters; lookup key blocks release on every path.**
