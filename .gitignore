@@ -5,3 +5,7 @@ target/
 .vscode/
 /dist/
 __pycache__/
+
+# per-run jqwik property-test state — never version it
+.jqwik-database
+**/.jqwik-database
