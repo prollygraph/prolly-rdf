@@ -315,6 +315,39 @@
             <include>**/*Property.java</include>
           </includes>
         </configuration>
+        <executions>
+          <!-- The default run: everything EXCEPT the merge cost pin, which needs -da (below). -->
+          <execution>
+            <id>default-test</id>
+            <configuration>
+              <excludes>
+                <exclude>**/SquashMergeReadScalingTest.java</exclude>
+              </excludes>
+            </configuration>
+          </execution>
+          <!--
+            Roadmap T25 — the merge cost pin, and the ONE test in this module that must run with
+            assertions DISABLED. MergeEngine.assertDictConsistency is gated on -ea and iterates the
+            entire merged SPOC index decoding every term (O(total quads)); with assertions on, that
+            sweep dominates a merge's read count, so a scaling pin measured under -ea would track
+            the consistency check rather than the merge — and would stay green even if the merge
+            regressed to a full-tree walk. Running it with -da measures the configuration
+            production actually uses. Every other test keeps -ea.
+          -->
+          <execution>
+            <id>merge-cost-pin</id>
+            <phase>test</phase>
+            <goals>
+              <goal>test</goal>
+            </goals>
+            <configuration>
+              <enableAssertions>false</enableAssertions>
+              <includes>
+                <include>**/SquashMergeReadScalingTest.java</include>
+              </includes>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
       <!-- Publish a test-jar so prolly-rdf4j-grpc (plan grpc-transport.md
            Step 1) can reuse the ProllySail / sync test fixtures in its
