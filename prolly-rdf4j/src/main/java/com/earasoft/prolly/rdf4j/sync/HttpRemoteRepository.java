@@ -16,6 +16,7 @@
 package com.earasoft.prolly.rdf4j.sync;
 
 import com.dolthub.prolly.HashUtils;
+import com.earasoft.prolly.rdf4j.sail.RefsStore;
 import com.earasoft.prolly.sync.DatabasePackSync;
 import com.earasoft.prolly.sync.SyncPack;
 import com.earasoft.prolly.sync.SyncPackCodec;
@@ -27,6 +28,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -41,6 +43,21 @@ import org.jspecify.annotations.Nullable;
  * <p>The JSON payloads are tiny and fixed-shape — hex hashes and {@code RefsStore}-validated branch
  * names, neither of which contains a JSON-special character — so they are built and scanned
  * directly rather than pulling in a JSON library.
+ *
+ * <p><b>That premise is now ENFORCED here, which it previously was not.</b> The paragraph above
+ * described what callers were assumed to pass, and nothing checked it: {@code compareAndSetRef} and
+ * {@code fetchSubstratePack} are public interface methods that interpolated their {@code branch}
+ * and {@code haveCommitHexes} arguments straight into the request body, so a branch name containing
+ * a double quote produced malformed — and attacker-shaped — JSON. Every entry point that reaches a
+ * hand-built payload now validates first, via {@link RefsStore#validateName} for branch names and
+ * {@link HexFormat} for hex, and rejects rather than escaping. Rejecting is the right choice
+ * precisely because it keeps the no-JSON-library design honest: escaping would mean hand-rolling an
+ * encoder, which is the thing this class exists to avoid.
+ *
+ * <p>Note what did <i>not</i> need fixing, so a future reader does not add redundant checks: {@code
+ * fetchPack} builds its hex from {@code byte[]} via {@link HashUtils#toHex}, which can only emit
+ * {@code [0-9a-f]}, and the {@code /sync/fetch} and {@code /sync/push} query strings are {@code
+ * URLEncoder}-encoded. Those are safe by construction.
  */
 public final class HttpRemoteRepository implements RemoteRepository {
 
@@ -138,6 +155,8 @@ public final class HttpRemoteRepository implements RemoteRepository {
     public java.util.Optional<DatabasePackSync.PackAndHead> fetchSubstratePack(
             String substrate, String branch, java.util.Set<String> haveCommitHexes)
             throws IOException {
+        RefsStore.validateName(branch);
+        haveCommitHexes.forEach(HttpRemoteRepository::requireHex);
         String query =
                 "/sync/fetch?substrate="
                         + java.net.URLEncoder.encode(substrate, StandardCharsets.UTF_8)
@@ -208,6 +227,7 @@ public final class HttpRemoteRepository implements RemoteRepository {
             byte @Nullable [] expectedOldHead,
             SyncPack pack)
             throws IOException {
+        RefsStore.validateName(branch);
         String query =
                 "/sync/push?substrate="
                         + java.net.URLEncoder.encode(substrate, StandardCharsets.UTF_8)
@@ -240,6 +260,7 @@ public final class HttpRemoteRepository implements RemoteRepository {
     @Override
     public boolean compareAndSetRef(String branch, byte @Nullable [] expected, byte[] desired)
             throws IOException {
+        RefsStore.validateName(branch);
         String json =
                 "{\"branch\":\""
                         + branch
@@ -301,6 +322,25 @@ public final class HttpRemoteRepository implements RemoteRepository {
      * Return {@code url} with any embedded userinfo (e.g. {@code https://user:pass@host}) stripped
      * — for safe logging. D-10 of plans/admin-remotes-outbound-auth.md.
      */
+    /**
+     * Rejects anything that is not strict, ASCII, even-length hex before it can reach a hand-built
+     * JSON body. {@link HexFormat#parseHex} is the validator rather than a regex on purpose: it is
+     * the same strict parser the engine's {@code HashUtils.fromHex} uses, so "what counts as hex"
+     * has exactly one definition on both sides of the wire. A regex here would be a second
+     * definition, free to drift.
+     */
+    private static void requireHex(String hex) {
+        if (hex == null) {
+            throw new IllegalArgumentException("commit hex must not be null");
+        }
+        try {
+            HexFormat.of().parseHex(hex);
+        } catch (IllegalArgumentException notHex) {
+            throw new IllegalArgumentException(
+                    "commit hex must be strict hex, got: " + hex, notHex);
+        }
+    }
+
     public static @Nullable String sanitizeUrlForLog(@Nullable String url) {
         if (url == null) return null;
         try {
