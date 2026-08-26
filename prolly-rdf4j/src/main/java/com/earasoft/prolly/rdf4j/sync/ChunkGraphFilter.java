@@ -62,7 +62,7 @@ import java.util.Set;
  * <h2>Caller contract</h2>
  *
  * <p>Caller is responsible for resolving graph IRIs to {@link
- * com.earasoft.prolly.rdf4j.value.TermId} numeric values via the dictionary before invoking this
+ * com.earasoft.prolly.rdf4j.term.TermId} numeric values via the dictionary before invoking this
  * filter. Phase 0 Step 3 ({@code PackBuilder} wire-up) ships an adapter that does this resolution
  * lookup; this class deliberately takes raw long values so it stays a pure algorithm independent of
  * the dict implementation.

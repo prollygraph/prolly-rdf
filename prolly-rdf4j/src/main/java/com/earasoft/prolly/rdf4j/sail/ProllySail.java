@@ -88,7 +88,7 @@ import org.slf4j.LoggerFactory;
  *     listeners can attach.
  * @implNote <b>Collaborators:</b> {@link NodeStore} + {@link BufferPool} (chunk storage / scratch),
  *     {@link PrefixTable} + {@link ProllyValueFactory} (Sail-level IRI prefix interning and value
- *     construction), {@link HashFunction}, {@link SailMetrics} (observability), {@code
+ *     construction), {@link HashFunction}, {@code SailMetrics} (observability), {@code
  *     RootMetaTreeStore} (durable root pointer), and {@code CommitLog} (the time-travel chain).
  *     <b>Dependents:</b> {@link ProllySailConnection} (every read/write runs through it) and the
  *     REST layer that wraps one Sail per repository.

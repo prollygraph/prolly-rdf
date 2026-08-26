@@ -48,9 +48,9 @@ import org.rocksdb.WriteBatchWithIndex;
  *
  * <h3>Within-transaction consistency</h3>
  *
- * <p>{@link #intern} stages new mappings into a caller-supplied {@link WriteBatch} that is not yet
- * committed, so a plain {@code dict-rev} read would not see a term interned earlier in the same
- * batch — and the same term (a recurring predicate, say) would be assigned a fresh id on every
+ * <p>{@link #intern} stages new mappings into a caller-supplied {@link AbstractWriteBatch} that is
+ * not yet committed, so a plain {@code dict-rev} read would not see a term interned earlier in the
+ * same batch — and the same term (a recurring predicate, say) would be assigned a fresh id on every
  * occurrence. The caller therefore passes a per-transaction {@code pending} map; {@code intern}
  * consults and updates it so each distinct term gets exactly one id per transaction. The map is
  * keyed by the encoded term bytes.

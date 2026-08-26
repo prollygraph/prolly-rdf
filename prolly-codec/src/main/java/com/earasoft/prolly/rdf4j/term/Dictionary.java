@@ -31,8 +31,10 @@ import java.util.Optional;
  *
  * <p>The dictionary is the source of truth for every term in the store. Indexes reference terms
  * only by their {@code TermId}, so the dictionary is on the read path for any operation that needs
- * to materialize a term value (e.g. {@link com.earasoft.prolly.rdf4j.value.ProllyValue}
- * construction from a tuple).
+ * to materialize a term value (e.g. {@code ProllyValue} construction from a tuple — {@code
+ * prolly-rdf4j} is DOWNSTREAM of this module, so that name is prose here and deliberately not a
+ * {@code @link}: javadoc cannot resolve it from a module that does not depend on it, and writing it
+ * as a link fails the build rather than producing a broken anchor).
  *
  * <p>Schema: a single Prolly tree with key column {@code Int64} (the {@code TermId.value()}) and a
  * value blob holding the encoded-term bytes produced by {@link TermCodec}.

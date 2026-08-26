@@ -31,18 +31,19 @@ import org.junit.jupiter.api.io.TempDir;
  * The flatsail's cancellation behaviour (roadmap T18, reduced — see the ruling below).
  *
  * <h2>Why this class does not contain the fault-injection test the task asked for</h2>
+ *
  * T18 specified a "RocksDB exception translation" test. It is not buildable today, and the attempt
  * is worth recording because the reason is a property of the Sail rather than of the test.
  *
- * <p>{@code RocksDbFlatSailConnection} translates {@code RocksDBException} into
- * {@link org.eclipse.rdf4j.sail.SailException} at four sites, so the translation code exists and
- * is plausibly right — but nothing can reach it. {@code RocksFlatStore} holds a {@code RocksDB}
- * handle directly, with no interface between the Sail and the engine to decorate; there is no
- * flatsail equivalent of {@code ErrorInjectingNodeStore}. The one injection available from outside
- * — closing the store under a live connection — does not throw: it is undefined behaviour at the
- * JNI layer and <b>aborts the JVM</b> (verified: SIGABRT, exit 134, with an {@code hs_err} dump).
- * So the specified test cannot be written without first adding a seam to production code, which is
- * a change this task does not authorise.
+ * <p>{@code RocksDbFlatSailConnection} translates {@code RocksDBException} into {@link
+ * org.eclipse.rdf4j.sail.SailException} at four sites, so the translation code exists and is
+ * plausibly right — but nothing can reach it. {@code RocksFlatStore} holds a {@code RocksDB} handle
+ * directly, with no interface between the Sail and the engine to decorate; there is no flatsail
+ * equivalent of {@code ErrorInjectingNodeStore}. The one injection available from outside — closing
+ * the store under a live connection — does not throw: it is undefined behaviour at the JNI layer
+ * and <b>aborts the JVM</b> (verified: SIGABRT, exit 134, with an {@code hs_err} dump). So the
+ * specified test cannot be written without first adding a seam to production code, which is a
+ * change this task does not authorise.
  *
  * <p>The consequence is worth stating plainly rather than leaving in a plan: the flat Sail's
  * storage-failure paths are unreachable by any test, so a genuine IO error in production would be
@@ -68,31 +69,41 @@ class RocksDbFlatSailFaultTest {
             try (SailConnection conn = sail.getConnection()) {
                 conn.begin(IsolationLevels.NONE);
                 for (int i = 0; i < 2_000; i++) {
-                    conn.addStatement(VF.createIRI("urn:f#s" + i), VF.createIRI("urn:f#p"),
+                    conn.addStatement(
+                            VF.createIRI("urn:f#s" + i),
+                            VF.createIRI("urn:f#p"),
                             VF.createIRI("urn:f#o" + i));
                 }
                 conn.commit();
             }
 
             AtomicReference<Throwable> failure = new AtomicReference<>();
-            Thread scanner = new Thread(() -> {
-                try (SailConnection conn = sail.getConnection();
-                        var it = conn.getStatements(null, null, null, false)) {
-                    Thread.currentThread().interrupt(); // cancelled mid-scan
-                    while (it.hasNext()) {
-                        it.next();
-                    }
-                } catch (RuntimeException aborted) {
-                    // Completing the scan and aborting with a translated exception are BOTH
-                    // acceptable — the contract pinned here is termination, not a specific
-                    // outcome. Hanging is the failure, and the join below is what detects it.
-                    failure.set(aborted);
-                }
-            }, "flatsail-scanner");
+            Thread scanner =
+                    new Thread(
+                            () -> {
+                                try (SailConnection conn = sail.getConnection();
+                                        var it = conn.getStatements(null, null, null, false)) {
+                                    Thread.currentThread().interrupt(); // cancelled mid-scan
+                                    while (it.hasNext()) {
+                                        it.next();
+                                    }
+                                } catch (RuntimeException aborted) {
+                                    // Completing the scan and aborting with a translated exception
+                                    // are BOTH
+                                    // acceptable — the contract pinned here is termination, not a
+                                    // specific
+                                    // outcome. Hanging is the failure, and the join below is what
+                                    // detects it.
+                                    failure.set(aborted);
+                                }
+                            },
+                            "flatsail-scanner");
             scanner.start();
             scanner.join(30_000);
 
-            assertEquals(Thread.State.TERMINATED, scanner.getState(),
+            assertEquals(
+                    Thread.State.TERMINATED,
+                    scanner.getState(),
                     "an interrupted scan must terminate within 30s — a scan that cannot be "
                             + "cancelled pins its connection until the process exits");
         } finally {
@@ -113,23 +124,28 @@ class RocksDbFlatSailFaultTest {
             try (SailConnection conn = sail.getConnection()) {
                 conn.begin(IsolationLevels.NONE);
                 for (int i = 0; i < 100; i++) {
-                    conn.addStatement(VF.createIRI("urn:f#s" + i), VF.createIRI("urn:f#p"),
+                    conn.addStatement(
+                            VF.createIRI("urn:f#s" + i),
+                            VF.createIRI("urn:f#p"),
                             VF.createIRI("urn:f#o" + i));
                 }
                 conn.commit();
             }
 
-            Thread scanner = new Thread(() -> {
-                try (SailConnection conn = sail.getConnection();
-                        var it = conn.getStatements(null, null, null, false)) {
-                    Thread.currentThread().interrupt();
-                    while (it.hasNext()) {
-                        it.next();
-                    }
-                } catch (RuntimeException ignored) {
-                    // see above
-                }
-            }, "flatsail-scanner-2");
+            Thread scanner =
+                    new Thread(
+                            () -> {
+                                try (SailConnection conn = sail.getConnection();
+                                        var it = conn.getStatements(null, null, null, false)) {
+                                    Thread.currentThread().interrupt();
+                                    while (it.hasNext()) {
+                                        it.next();
+                                    }
+                                } catch (RuntimeException ignored) {
+                                    // see above
+                                }
+                            },
+                            "flatsail-scanner-2");
             scanner.start();
             scanner.join(30_000);
 
@@ -140,7 +156,9 @@ class RocksDbFlatSailFaultTest {
                     it.next();
                     seen++;
                 }
-                assertEquals(100, seen,
+                assertEquals(
+                        100,
+                        seen,
                         "every statement must still be readable after a cancelled scan — a "
                                 + "cancellation that damages the store escalates a cancelled query "
                                 + "into a lost database");

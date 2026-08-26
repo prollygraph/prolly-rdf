@@ -28,7 +28,6 @@ import com.earasoft.prolly.rdf4j.sail.RootMetaTreeStore;
 import com.earasoft.prolly.semantic.canon.RdfCanonicalizer;
 import java.nio.file.Path;
 import java.time.Duration;
-import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -57,19 +56,24 @@ class CanonicalizationBudgetRollbackTest {
     private static final String KNOWS = "urn:ex/knows";
 
     /** A canonicalizer slow enough that any realistic budget cancels it. */
-    private static final RdfCanonicalizer GLACIAL = quads -> {
-        try {
-            Thread.sleep(5_000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("cancelled", e);
-        }
-        return quads;
-    };
+    private static final RdfCanonicalizer GLACIAL =
+            quads -> {
+                try {
+                    Thread.sleep(5_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("cancelled", e);
+                }
+                return quads;
+            };
 
     private static CanonicalizingProllySail sailWithABudgetThatCannotBeMet(Path dir) {
-        ProllySail delegate = new ProllySail(new InMemoryNodeStore(), new HeapBufferPool(),
-                RootMetaTreeStore.beside(dir), CommitLog.beside(dir));
+        ProllySail delegate =
+                new ProllySail(
+                        new InMemoryNodeStore(),
+                        new HeapBufferPool(),
+                        RootMetaTreeStore.beside(dir),
+                        CommitLog.beside(dir));
         return new CanonicalizingProllySail(delegate, GLACIAL, Duration.ofMillis(50));
     }
 
@@ -90,11 +94,15 @@ class CanonicalizationBudgetRollbackTest {
         try (RepositoryConnection conn = repo.getConnection()) {
             conn.begin();
             addOneBlankNodeStatement(conn);
-            RuntimeException thrown = assertThrows(RuntimeException.class, conn::commit,
-                    "an unmeetable canonicalization budget must fail the commit — silently "
-                            + "writing a non-canonical labelling is the outcome the budget exists "
-                            + "to prevent");
-            assertTrue(rootCauseMentions(thrown, "budget"),
+            RuntimeException thrown =
+                    assertThrows(
+                            RuntimeException.class,
+                            conn::commit,
+                            "an unmeetable canonicalization budget must fail the commit — silently "
+                                    + "writing a non-canonical labelling is the outcome the budget exists "
+                                    + "to prevent");
+            assertTrue(
+                    rootCauseMentions(thrown, "budget"),
                     "the failure must name the budget so an operator can act on it, got: "
                             + describe(thrown));
         } finally {
@@ -117,12 +125,16 @@ class CanonicalizationBudgetRollbackTest {
                 assertThrows(RuntimeException.class, conn::commit);
             }
             try (RepositoryConnection reader = repo.getConnection()) {
-                assertEquals(0, reader.size(),
+                assertEquals(
+                        0,
+                        reader.size(),
                         "a commit that failed its budget must leave NO statements behind — a "
                                 + "partial write here means the fail-closed check merely moved the "
                                 + "corruption one layer out");
-                assertFalse(reader.hasStatement(null, reader.getValueFactory().createIRI(KNOWS),
-                        null, false), "the statement from the failed commit is visible");
+                assertFalse(
+                        reader.hasStatement(
+                                null, reader.getValueFactory().createIRI(KNOWS), null, false),
+                        "the statement from the failed commit is visible");
             }
         } finally {
             repo.shutDown();
@@ -137,25 +149,31 @@ class CanonicalizationBudgetRollbackTest {
      */
     @Test
     void theRepositoryIsStillUsableAfterABudgetOverrun(@TempDir Path dir) {
-        ProllySail delegate = new ProllySail(new InMemoryNodeStore(), new HeapBufferPool(),
-                RootMetaTreeStore.beside(dir), CommitLog.beside(dir));
+        ProllySail delegate =
+                new ProllySail(
+                        new InMemoryNodeStore(),
+                        new HeapBufferPool(),
+                        RootMetaTreeStore.beside(dir),
+                        CommitLog.beside(dir));
         // A canonicalizer that is glacial ONCE, then instant — so the retry can actually succeed
         // and prove the sail recovered, rather than failing again for the same reason.
         java.util.concurrent.atomic.AtomicBoolean firstCall =
                 new java.util.concurrent.atomic.AtomicBoolean(true);
-        RdfCanonicalizer slowOnce = quads -> {
-            if (firstCall.getAndSet(false)) {
-                try {
-                    Thread.sleep(5_000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new IllegalStateException("cancelled", e);
-                }
-            }
-            return quads;
-        };
-        Repository repo = new SailRepository(
-                new CanonicalizingProllySail(delegate, slowOnce, Duration.ofMillis(50)));
+        RdfCanonicalizer slowOnce =
+                quads -> {
+                    if (firstCall.getAndSet(false)) {
+                        try {
+                            Thread.sleep(5_000);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new IllegalStateException("cancelled", e);
+                        }
+                    }
+                    return quads;
+                };
+        Repository repo =
+                new SailRepository(
+                        new CanonicalizingProllySail(delegate, slowOnce, Duration.ofMillis(50)));
         repo.init();
         try {
             try (RepositoryConnection conn = repo.getConnection()) {
@@ -167,12 +185,16 @@ class CanonicalizationBudgetRollbackTest {
             try (RepositoryConnection conn = repo.getConnection()) {
                 conn.begin();
                 ValueFactory vf = conn.getValueFactory();
-                conn.add(vf.createIRI("urn:ex/alice"), vf.createIRI(KNOWS),
+                conn.add(
+                        vf.createIRI("urn:ex/alice"),
+                        vf.createIRI(KNOWS),
                         vf.createIRI("urn:ex/bob"));
                 conn.commit();
             }
             try (RepositoryConnection reader = repo.getConnection()) {
-                assertEquals(1, reader.size(),
+                assertEquals(
+                        1,
+                        reader.size(),
                         "after a budget overrun the repository must still accept work — only the "
                                 + "retry's statement may be present");
             }
@@ -193,7 +215,10 @@ class CanonicalizationBudgetRollbackTest {
     private static String describe(Throwable t) {
         StringBuilder sb = new StringBuilder();
         for (Throwable c = t; c != null; c = c.getCause()) {
-            sb.append(c.getClass().getSimpleName()).append(": ").append(c.getMessage()).append(" <- ");
+            sb.append(c.getClass().getSimpleName())
+                    .append(": ")
+                    .append(c.getMessage())
+                    .append(" <- ");
         }
         return sb.toString();
     }

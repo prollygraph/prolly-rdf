@@ -168,8 +168,8 @@ public final class RemotesStore {
         Path tmp = Files.createTempFile(requireDir(), name + ".", ".tmp");
         try {
             Files.writeString(tmp, url + "\n", StandardCharsets.UTF_8);
-            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE);
+            Files.move(
+                    tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException | RuntimeException failed) {
             Files.deleteIfExists(tmp); // never leave a stray temp behind on the failure path
             throw failed;
@@ -275,8 +275,8 @@ public final class RemotesStore {
         Path tmp = Files.createTempFile(file.getParent(), BINDINGS_FILENAME + ".", ".tmp");
         try {
             Files.writeString(tmp, encodeFlatJson(bindings), StandardCharsets.UTF_8);
-            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE);
+            Files.move(
+                    tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException | RuntimeException failed) {
             Files.deleteIfExists(tmp);
             throw failed;

@@ -55,11 +55,11 @@ public final class DictionaryTermEncoder {
     /**
      * Encode {@code v} to term bytes for a <b>write</b>. A custom-datatype literal interns its
      * datatype IRI in {@code dict} (allocating a {@code TermId} if absent) and is encoded as a
-     * custom literal; an RDF-star {@link Triple} recursively interns its three components and is
+     * custom literal; an RDF-star {@code Triple} recursively interns its three components and is
      * encoded as a quoted triple; everything else delegates to {@link TermEncoder#encode}. Never
      * returns null.
      *
-     * <p><b>Quoted-triple canonical tag:</b> RDF4J's {@link Triple} value carries no
+     * <p><b>Quoted-triple canonical tag:</b> RDF4J's {@code Triple} value carries no
      * asserted/unasserted distinction, so every RDF4J-sourced triple term encodes with the ASSERTED
      * tag ({@code 0xC0}) — the one {@code DictionaryTermResolver} decodes to {@link ProllyTriple}.
      * One canonical tag is load-bearing for content addressing: the TermId is the hash of these
@@ -88,7 +88,7 @@ public final class DictionaryTermEncoder {
     /**
      * Look up {@code v}'s {@link TermId} for a <b>read</b>. For a custom-datatype literal the
      * datatype IRI is looked up (not interned): if it is absent the literal cannot be in the store,
-     * so this returns {@link Optional#empty()}. An RDF-star {@link Triple} looks up its three
+     * so this returns {@link Optional#empty()}. An RDF-star {@code Triple} looks up its three
      * components the same way — any component absent means the triple term cannot be in the store.
      * Everything else delegates to {@link Dictionary#findTermId}.
      */

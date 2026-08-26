@@ -38,6 +38,7 @@ import org.junit.jupiter.api.io.TempDir;
  * invisible until someone noticed a slow publish on a large repo.
  *
  * <h2>Why this test disables assertions, and why that is not cheating</h2>
+ *
  * {@code MergeEngine.assertDictConsistency} is gated on {@code -ea} and, when enabled, iterates the
  * <b>entire</b> merged SPOC index decoding all four terms of every key — strictly O(total quads).
  * Surefire enables assertions by default, so in the ordinary test configuration a merge's read
@@ -47,12 +48,13 @@ import org.junit.jupiter.api.io.TempDir;
  * <p>Worse, a pin written under {@code -ea} would be actively misleading. It would go green today
  * and <i>stay</i> green if the merge itself regressed to a full-tree walk, because the assertion's
  * O(n) term already dominates the total. So this class runs in a dedicated surefire execution with
- * {@code enableAssertions=false} (see {@code prolly-rdf4j/pom.xml}, execution
- * {@code merge-cost-pin}), which measures the configuration production actually runs. The
- * consistency check keeps its own value under {@code -ea} for every other test; it is only
- * excluded from the measurement window.
+ * {@code enableAssertions=false} (see {@code prolly-rdf4j/pom.xml}, execution {@code
+ * merge-cost-pin}), which measures the configuration production actually runs. The consistency
+ * check keeps its own value under {@code -ea} for every other test; it is only excluded from the
+ * measurement window.
  *
  * <h2>What this actually measures — the task's premise was wrong</h2>
+ *
  * Roadmap T25 asked for a pin that <i>"reads grow with the DIFF, not the tree"</i>, on the strength
  * of {@code MergeEngine}'s comment. Measurement refuted it. With assertions off and a constant
  * one-triple diff, a 16× larger store costs <b>12.3× the reads</b>:
@@ -96,8 +98,13 @@ class SquashMergeReadScalingTest {
             // Each size gets its own directory, and it must EXIST — the sidecar stores write
             // beside it and a missing parent surfaces as "failed to persist RootMetaTree pointer".
             java.nio.file.Files.createDirectories(dir);
-            sail = new ProllySail(store, pool, RootMetaTreeStore.beside(dir),
-                    CommitLog.beside(dir), RefsStore.beside(dir));
+            sail =
+                    new ProllySail(
+                            store,
+                            pool,
+                            RootMetaTreeStore.beside(dir),
+                            CommitLog.beside(dir),
+                            RefsStore.beside(dir));
             repo = new SailRepository(sail);
             repo.init();
         }
@@ -108,7 +115,9 @@ class SquashMergeReadScalingTest {
                 ValueFactory vf = repo.getValueFactory();
                 c.begin();
                 for (int i = 0; i < count; i++) {
-                    c.add(vf.createIRI(NS + prefix + i), vf.createIRI(NS + "p"),
+                    c.add(
+                            vf.createIRI(NS + prefix + i),
+                            vf.createIRI(NS + "p"),
                             vf.createIRI(NS + "o" + i));
                 }
                 c.commit();
@@ -122,9 +131,12 @@ class SquashMergeReadScalingTest {
 
         /** Forks {@code branch} off {@code base} with exactly one new triple. */
         byte[] forkBranchWithOneTriple(String branch, byte[] base, String s) throws IOException {
-            ProllySail snap = ProllySail.openSnapshotAt(store, pool,
-                    new io.micrometer.core.instrument.composite.CompositeMeterRegistry(),
-                    sail.treeHashOf(base));
+            ProllySail snap =
+                    ProllySail.openSnapshotAt(
+                            store,
+                            pool,
+                            new io.micrometer.core.instrument.composite.CompositeMeterRegistry(),
+                            sail.treeHashOf(base));
             SailRepository snapRepo = new SailRepository(snap);
             snapRepo.init();
             byte[] head;
@@ -144,13 +156,14 @@ class SquashMergeReadScalingTest {
     }
 
     /**
-     * Reads charged by one squash merge of a ONE-TRIPLE branch, over stores of increasing size.
-     * The diff is held constant while the tree grows 16×; a merge that walks only the changed path
-     * pays roughly tree-height more, while a full-tree walk pays ~16× more.
+     * Reads charged by one squash merge of a ONE-TRIPLE branch, over stores of increasing size. The
+     * diff is held constant while the tree grows 16×; a merge that walks only the changed path pays
+     * roughly tree-height more, while a full-tree walk pays ~16× more.
      */
     @Test
     void mergeReadsScaleWithTheDiffNotTheWholeTree(@TempDir Path dir) throws Exception {
-        assertTrue(!assertionsEnabled(),
+        assertTrue(
+                !assertionsEnabled(),
                 "this pin MUST run with -da: MergeEngine.assertDictConsistency is O(total quads) "
                         + "under -ea and would dominate the measurement, making the test pass even "
                         + "if the merge regressed to a full-tree walk. Run it via the "
@@ -162,21 +175,26 @@ class SquashMergeReadScalingTest {
         for (int idx = 0; idx < sizes.length; idx++) {
             CountedTarget t = new CountedTarget(dir.resolve("n" + sizes[idx]));
 
-            byte[] base = t.commitBulk("bulk", sizes[idx]);          // the big shared history
+            byte[] base = t.commitBulk("bulk", sizes[idx]); // the big shared history
             byte[] branch = t.forkBranchWithOneTriple("feature", base, "featureOnly");
-            t.commitOne("mainOnly");                                  // main diverges by one triple
+            t.commitOne("mainOnly"); // main diverges by one triple
 
-            long before = t.store.readCount();                        // window opens AFTER setup
+            long before = t.store.readCount(); // window opens AFTER setup
             MergeEngine.SquashResult result =
                     MergeEngine.squashMergeStructural(t.sail, "feature", "squash " + sizes[idx]);
             mergeReads[idx] = t.store.readCount() - before;
 
-            assertTrue(result.newCommit() != null,
+            assertTrue(
+                    result.newCommit() != null,
                     "the merge must actually produce a commit at n=" + sizes[idx]);
-            assertEquals(1, result.added(),
+            assertEquals(
+                    1,
+                    result.added(),
                     "the workload is a ONE-triple diff — if this is not 1 the measurement below "
-                            + "is not measuring what it claims, at n=" + sizes[idx]);
-            System.out.printf("[squash-merge-read-scaling] n=%6d merge-reads=%7d%n",
+                            + "is not measuring what it claims, at n="
+                            + sizes[idx]);
+            System.out.printf(
+                    "[squash-merge-read-scaling] n=%6d merge-reads=%7d%n",
                     sizes[idx], mergeReads[idx]);
         }
 
@@ -190,17 +208,27 @@ class SquashMergeReadScalingTest {
         // and like every ratchet in this repo it may only ever fall.
         for (int idx = 0; idx < sizes.length; idx++) {
             double readsPerTriple = (double) mergeReads[idx] / sizes[idx];
-            assertTrue(readsPerTriple < 0.5,
-                    "merge must read at LEAF granularity, not per triple: n=" + sizes[idx]
-                            + " charged " + mergeReads[idx] + " reads = " + readsPerTriple
+            assertTrue(
+                    readsPerTriple < 0.5,
+                    "merge must read at LEAF granularity, not per triple: n="
+                            + sizes[idx]
+                            + " charged "
+                            + mergeReads[idx]
+                            + " reads = "
+                            + readsPerTriple
                             + " per triple (bound 0.5, measured ~0.22-0.29)");
         }
 
         // And it must not become SUPER-linear — that would mean a repeated walk per element.
         double ratio = (double) mergeReads[sizes.length - 1] / mergeReads[0];
-        assertTrue(ratio < 16.0,
+        assertTrue(
+                ratio < 16.0,
                 "a 16x larger store must not cost MORE than 16x the merge reads; observed "
-                        + ratio + "x (" + mergeReads[0] + " → " + mergeReads[sizes.length - 1]
+                        + ratio
+                        + "x ("
+                        + mergeReads[0]
+                        + " → "
+                        + mergeReads[sizes.length - 1]
                         + "). Super-linear growth means a nested walk crept in.");
     }
 

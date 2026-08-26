@@ -16,7 +16,7 @@
 package com.earasoft.prolly.rdf4j.sync;
 
 /**
- * Result type from {@link SecretResolver#resolve}. Sealed so outbound-request builders can
+ * Result type from {@code SecretResolver#resolve}. Sealed so outbound-request builders can
  * exhaustively switch over the auth variants without a default arm.
  *
  * <p>Step 3 of {@code plans/admin-remotes-page.md}. Three variants for v1 — no SSH-key auth in this

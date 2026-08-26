@@ -33,9 +33,9 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * The in-JVM mutation races for {@link TagStore} and {@link RemotesStore} (roadmap T16), mirroring
  * {@code RefsStoreConcurrencyTest} for the two sibling sidecar stores it left uncovered. All three
- * share the same file-backed hazard its javadoc names — {@code FileChannel.lock()} throws
- * {@code OverlappingFileLockException} for a second same-JVM thread unless the monitor serializes
- * them first — so a store that got the locking subtly wrong would fail here and nowhere else.
+ * share the same file-backed hazard its javadoc names — {@code FileChannel.lock()} throws {@code
+ * OverlappingFileLockException} for a second same-JVM thread unless the monitor serializes them
+ * first — so a store that got the locking subtly wrong would fail here and nowhere else.
  *
  * <p>The two stores are raced on DIFFERENT invariants, because their APIs promise different things
  * and pinning the wrong one would be decoration:
@@ -76,16 +76,18 @@ class TagRemotesConcurrencyTest {
 
         for (int i = 0; i < THREADS; i++) {
             final int id = i;
-            threads[i] = new Thread(() -> {
-                try {
-                    start.await();
-                    if (tags.create(name, commitHash(id), "from thread " + id)) {
-                        winners.incrementAndGet();
-                    }
-                } catch (Throwable t) {
-                    failures.add(t);
-                }
-            });
+            threads[i] =
+                    new Thread(
+                            () -> {
+                                try {
+                                    start.await();
+                                    if (tags.create(name, commitHash(id), "from thread " + id)) {
+                                        winners.incrementAndGet();
+                                    }
+                                } catch (Throwable t) {
+                                    failures.add(t);
+                                }
+                            });
             threads[i].start();
         }
         start.countDown();
@@ -93,21 +95,28 @@ class TagRemotesConcurrencyTest {
             t.join(30_000);
         }
 
-        assertTrue(failures.isEmpty(),
+        assertTrue(
+                failures.isEmpty(),
                 "no thread may fail outright — a same-JVM lock collision would surface here: "
                         + failures);
         for (Thread t : threads) {
             assertEquals(Thread.State.TERMINATED, t.getState(), "no wedge");
         }
-        assertEquals(1, winners.get(),
-                "create-if-absent must have EXACTLY one winner among " + THREADS
-                        + " racers; " + winners.get() + " threads believed they created the tag");
+        assertEquals(
+                1,
+                winners.get(),
+                "create-if-absent must have EXACTLY one winner among "
+                        + THREADS
+                        + " racers; "
+                        + winners.get()
+                        + " threads believed they created the tag");
 
         Optional<TagStore.Entry> survivor = tags.get(name);
         assertTrue(survivor.isPresent(), "the tag survives the race");
         assertEquals(32, survivor.get().commit().length, "no torn commit hash");
         assertEquals((byte) 0xC0, survivor.get().commit()[31], "the surviving hash is well-formed");
-        assertTrue(survivor.get().message().startsWith("from thread "),
+        assertTrue(
+                survivor.get().message().startsWith("from thread "),
                 "the message belongs to one writer, not a mixture: " + survivor.get().message());
         assertEquals(1, tags.list().size(), "exactly one tag exists after the race");
     }
@@ -132,16 +141,18 @@ class TagRemotesConcurrencyTest {
         Thread[] threads = new Thread[THREADS];
 
         for (int i = 0; i < THREADS; i++) {
-            threads[i] = new Thread(() -> {
-                try {
-                    start.await();
-                    if (tags.delete(name)) {
-                        deleters.incrementAndGet();
-                    }
-                } catch (Throwable t) {
-                    failures.add(t);
-                }
-            });
+            threads[i] =
+                    new Thread(
+                            () -> {
+                                try {
+                                    start.await();
+                                    if (tags.delete(name)) {
+                                        deleters.incrementAndGet();
+                                    }
+                                } catch (Throwable t) {
+                                    failures.add(t);
+                                }
+                            });
             threads[i].start();
         }
         start.countDown();
@@ -150,9 +161,12 @@ class TagRemotesConcurrencyTest {
         }
 
         assertTrue(failures.isEmpty(), "no thread may fail outright: " + failures);
-        assertEquals(1, deleters.get(),
+        assertEquals(
+                1,
+                deleters.get(),
                 "exactly one delete may report success — a second true means two callers both "
-                        + "believe they removed it, got " + deleters.get());
+                        + "believe they removed it, got "
+                        + deleters.get());
         assertTrue(tags.get(name).isEmpty(), "the tag is gone");
     }
 
@@ -177,17 +191,19 @@ class TagRemotesConcurrencyTest {
 
         for (int i = 0; i < THREADS; i++) {
             final String url = "https://example.org/repo-" + i;
-            threads[i] = new Thread(() -> {
-                try {
-                    start.await();
-                    for (int rep = 0; rep < 10; rep++) {
-                        remotes.put(name, url);
-                        written.add(url);
-                    }
-                } catch (Throwable t) {
-                    failures.add(t);
-                }
-            });
+            threads[i] =
+                    new Thread(
+                            () -> {
+                                try {
+                                    start.await();
+                                    for (int rep = 0; rep < 10; rep++) {
+                                        remotes.put(name, url);
+                                        written.add(url);
+                                    }
+                                } catch (Throwable t) {
+                                    failures.add(t);
+                                }
+                            });
             threads[i].start();
         }
         start.countDown();
@@ -195,14 +211,19 @@ class TagRemotesConcurrencyTest {
             t.join(30_000);
         }
 
-        assertTrue(failures.isEmpty(),
+        assertTrue(
+                failures.isEmpty(),
                 "concurrent put must not throw — the store hand-encodes its bindings file, so a "
-                        + "lock or parse failure surfaces as an exception here: " + failures);
+                        + "lock or parse failure surfaces as an exception here: "
+                        + failures);
         Optional<String> survivor = remotes.get(name);
         assertTrue(survivor.isPresent(), "the binding survives the race");
-        assertTrue(written.contains(survivor.get()),
+        assertTrue(
+                written.contains(survivor.get()),
                 "last-write-wins is fine; a value nobody wrote is not. Survivor '"
-                        + survivor.get() + "' is not among the " + written.size()
+                        + survivor.get()
+                        + "' is not among the "
+                        + written.size()
                         + " written values — the flat-JSON encoding tore under concurrency");
     }
 
@@ -229,14 +250,16 @@ class TagRemotesConcurrencyTest {
         for (int i = 0; i < THREADS; i++) {
             final String name = "remote-" + i;
             final String url = "https://example.org/" + i;
-            threads[i] = new Thread(() -> {
-                try {
-                    start.await();
-                    remotes.put(name, url);
-                } catch (Throwable t) {
-                    failures.add(t);
-                }
-            });
+            threads[i] =
+                    new Thread(
+                            () -> {
+                                try {
+                                    start.await();
+                                    remotes.put(name, url);
+                                } catch (Throwable t) {
+                                    failures.add(t);
+                                }
+                            });
             threads[i].start();
         }
         start.countDown();
@@ -249,9 +272,14 @@ class TagRemotesConcurrencyTest {
         for (int i = 0; i < THREADS; i++) {
             remotes.get("remote-" + i).ifPresent(u -> present.put(u, u));
         }
-        assertEquals(THREADS, present.size(),
-                "every distinct remote written concurrently must survive — " + present.size()
-                        + " of " + THREADS + " are present, so a whole-file rewrite dropped keys "
+        assertEquals(
+                THREADS,
+                present.size(),
+                "every distinct remote written concurrently must survive — "
+                        + present.size()
+                        + " of "
+                        + THREADS
+                        + " are present, so a whole-file rewrite dropped keys "
                         + "written by another thread");
     }
 

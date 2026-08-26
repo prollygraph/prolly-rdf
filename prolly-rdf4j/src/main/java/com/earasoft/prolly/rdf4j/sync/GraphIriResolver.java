@@ -34,7 +34,7 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
  * {@link TermId}-value surface that {@link ChunkGraphFilter} + {@link PackBuilder} take internally.
  *
  * <p>Lives in {@code prolly-rdf4j} (not {@code prolly-rdf4j-rest}) so unit tests of the full filter
- * pipeline can exercise it without a Spring context. The REST surface ({@link SyncController} in a
+ * pipeline can exercise it without a Spring context. The REST surface ({@code SyncController} in a
  * future Step 5) consumes this adapter when {@code prolly.rdf4j.auth.backend=sparql} is active to
  * build the default-DENY excluded set per ADR-0015.
  *
