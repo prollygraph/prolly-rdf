@@ -94,14 +94,61 @@
 
   <build>
     <plugins>
-      <!-- prolly-codec had no main build section; add one solely to run the jqwik *Property tests
-           (run-dormant-property-tests, P1) — its `DictionaryModelProperty` was dormant under Surefire's
-           default includes (*Test/*Tests/*TestCase). The argLine (tmpdir + jacoco @{argLine}) is inherited
-           from the parent and merged with these includes. -->
+      <!-- Line/branch coverage (JaCoCo, roadmap T10 — this module previously had NO agent:
+           the old comment here claimed the argLine was "inherited from the parent", but the
+           parent has no jacoco at all, so coverage was silently unmeasured). prepare-agent
+           publishes into @{argLine}; surefire below expands it (the parent hard-codes a
+           literal argLine that would otherwise shadow the agent). -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.14</version>
+        <executions>
+          <execution>
+            <id>jacoco-prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>jacoco-report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <!-- Ratchet floors (roadmap T10): measured 2026-08-25 from this module's own
+               jacoco.csv — INSTRUCTION 0.9829, LINE 0.9875, BRANCH 0.9632 — gated at
+               measured minus five points. Floors only ever rise. -->
+          <execution>
+            <id>jacoco-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit><counter>INSTRUCTION</counter><value>COVEREDRATIO</value><minimum>0.93</minimum></limit>
+                    <limit><counter>LINE</counter><value>COVEREDRATIO</value><minimum>0.93</minimum></limit>
+                    <limit><counter>BRANCH</counter><value>COVEREDRATIO</value><minimum>0.91</minimum></limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- Runs the jqwik *Property tests (run-dormant-property-tests, P1) — its
+           `DictionaryModelProperty` was dormant under Surefire's default includes
+           (*Test/*Tests/*TestCase). -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
+          <argLine>@{argLine} --enable-native-access=ALL-UNNAMED -Djava.io.tmpdir=${project.build.directory}</argLine>
           <includes>
             <include>**/Test*.java</include>
             <include>**/*Test.java</include>

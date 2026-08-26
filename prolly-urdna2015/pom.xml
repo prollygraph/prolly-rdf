@@ -89,6 +89,28 @@
               <goal>report</goal>
             </goals>
           </execution>
+          <!-- Ratchet floors (roadmap T10): measured 2026-08-25 from this module's own
+               jacoco.csv — INSTRUCTION 0.9322, LINE 0.9348, BRANCH 0.8645 — gated at
+               measured minus five points. Floors only ever rise. -->
+          <execution>
+            <id>jacoco-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit><counter>INSTRUCTION</counter><value>COVEREDRATIO</value><minimum>0.88</minimum></limit>
+                    <limit><counter>LINE</counter><value>COVEREDRATIO</value><minimum>0.88</minimum></limit>
+                    <limit><counter>BRANCH</counter><value>COVEREDRATIO</value><minimum>0.81</minimum></limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
       <plugin>
