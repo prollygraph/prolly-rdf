@@ -66,6 +66,7 @@ public final class GraphScopedZeroLengthPathIteration extends LookAheadIteration
     private record VertexInGraph(Value vertex, @Nullable Value graph) {}
 
     private final BindingSet bindings;
+    private final boolean endpointsShareOneVar;
     private final @Nullable Value subj;
     private final @Nullable Value obj;
     private final @Nullable Var contextVar;
@@ -106,6 +107,12 @@ public final class GraphScopedZeroLengthPathIteration extends LookAheadIteration
         this.context = context;
         this.setSubject = context.addBinding(subjectVar.getName());
         this.setObject = context.addBinding(objVar.getName());
+        // ?x p* ?x — both endpoints the SAME variable. The vertex walk binds the
+        // one variable once; a second accept on the same name is an
+        // already-bound violation (caught by the T4 query generator's very
+        // first full-gate run; upstream's iteration has the identical latent
+        // crash, masked in production only by disabled assertions).
+        this.endpointsShareOneVar = subjectVar.getName().equals(objVar.getName());
         this.setContext = contextVar != null ? context.addBinding(contextVar.getName()) : null;
         if (subj == null && obj == null) {
             // The vertex walk: every subject and object of every statement in the
@@ -187,7 +194,9 @@ public final class GraphScopedZeroLengthPathIteration extends LookAheadIteration
         }
         MutableBindingSet next = context.createBindingSet(bindings);
         setSubject.accept(vertex, next);
-        setObject.accept(vertex, next);
+        if (!endpointsShareOneVar) {
+            setObject.accept(vertex, next);
+        }
         // Bind the graph var only when the incoming bindings didn't already fix
         // it (a pre-bound ?g — e.g. the per-graph ArbitraryLengthPath
         // decomposition — already scoped the scan; re-adding would collide).

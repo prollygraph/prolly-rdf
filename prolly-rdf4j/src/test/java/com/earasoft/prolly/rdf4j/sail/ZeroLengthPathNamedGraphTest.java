@@ -138,6 +138,25 @@ class ZeroLengthPathNamedGraphTest {
     }
 
     /**
+     * The T4 generator's first catch (hardening round 2): {@code ?t p* ?t} — BOTH path endpoints
+     * the same variable — crashed the vertex walk with "variable already bound" (the emit bound the
+     * one variable twice; upstream has the identical latent crash, masked in production by disabled
+     * assertions). Zero-length semantics for the shape: every vertex pairs with itself, so the rows
+     * are simply the per-graph vertex sets.
+     */
+    @Test
+    void sameVariableAtBothEndpointsIsTheVertexSet() {
+        assertEquals(
+                List.of("urn:g1|urn:a", "urn:g1|urn:b", "urn:g2|urn:a", "urn:g2|urn:c"),
+                tBindings("SELECT ?g ?t WHERE { GRAPH ?g { ?t <urn:p1>* ?t } }"),
+                "?t p* ?t under GRAPH ?g: each graph's vertices, once each");
+        assertEquals(
+                List.of("urn:a", "urn:b", "urn:c"),
+                tBindings("SELECT ?t WHERE { ?t <urn:p1>* ?t }"),
+                "default graph (union): the distinct vertex set");
+    }
+
+    /**
      * Bound-endpoint branches: mirror semantics, untouched by the graph-aware walk — the
      * zero-length self row for a bound subject, with {@code ?g} left unbound exactly as upstream
      * leaves it (the bound branch never consults the store, so it has no graph to bind).
