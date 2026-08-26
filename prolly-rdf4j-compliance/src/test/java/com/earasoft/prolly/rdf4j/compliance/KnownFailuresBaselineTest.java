@@ -61,6 +61,9 @@ class KnownFailuresBaselineTest {
      */
     private static final int QUERY10_MAX = 8;
 
+    /** SPARQL 1.1 SYNTAX baseline cap — the suite is 160/160; the file exists for governance. */
+    private static final int SYNTAX_MAX = 0;
+
     @Test
     void query_baseline_may_only_shrink() {
         List<String> baseline = KnownFailures.load("/known-failures/sparql11-query.txt");
@@ -102,5 +105,18 @@ class KnownFailuresBaselineTest {
                         + " — a NEW SPARQL 1.0 conformance gap; raise QUERY10_MAX deliberately"
                         + " (and update known-failures/sparql10-query.txt's header) or fix the"
                         + " regression.");
+    }
+
+    @org.junit.jupiter.api.Test
+    void syntaxBaselineWithinCap() {
+        java.util.List<String> baseline = KnownFailures.load("/known-failures/sparql11-syntax.txt");
+        org.junit.jupiter.api.Assertions.assertTrue(
+                baseline.size() <= SYNTAX_MAX,
+                "sparql11-syntax baseline has "
+                        + baseline.size()
+                        + " entries, cap is "
+                        + SYNTAX_MAX
+                        + " — a parser conformance regression; fix it or raise SYNTAX_MAX"
+                        + " deliberately.");
     }
 }

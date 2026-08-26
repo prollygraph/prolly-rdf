@@ -65,6 +65,10 @@ class TermCodecTagStabilityTest {
                     put("XSD_ANYURI", (byte) 0x42);
                     put("XSD_BASE64BINARY", (byte) 0x60);
                     put("XSD_HEXBINARY", (byte) 0x61);
+                    put("QUOTED_TRIPLE_ASSERTED", (byte) 0xC0);
+                    put("QUOTED_TRIPLE_UNASSERTED", (byte) 0xC1);
+                    put("QUOTED_QUAD_ASSERTED", (byte) 0xC2);
+                    put("QUOTED_QUAD_UNASSERTED", (byte) 0xC3);
                     put("IRI_SHORT_PREFIX", (byte) 0x80);
                 }
             };
@@ -94,6 +98,11 @@ class TermCodecTagStabilityTest {
         assertEquals(GOLDEN.get("XSD_ANYURI"), TermCodec.TAG_XSD_ANYURI);
         assertEquals(GOLDEN.get("XSD_BASE64BINARY"), TermCodec.TAG_XSD_BASE64BINARY);
         assertEquals(GOLDEN.get("XSD_HEXBINARY"), TermCodec.TAG_XSD_HEXBINARY);
+        assertEquals(GOLDEN.get("QUOTED_TRIPLE_ASSERTED"), TermCodec.TAG_QUOTED_TRIPLE_ASSERTED);
+        assertEquals(
+                GOLDEN.get("QUOTED_TRIPLE_UNASSERTED"), TermCodec.TAG_QUOTED_TRIPLE_UNASSERTED);
+        assertEquals(GOLDEN.get("QUOTED_QUAD_ASSERTED"), TermCodec.TAG_QUOTED_QUAD_ASSERTED);
+        assertEquals(GOLDEN.get("QUOTED_QUAD_UNASSERTED"), TermCodec.TAG_QUOTED_QUAD_UNASSERTED);
         assertEquals(GOLDEN.get("IRI_SHORT_PREFIX"), TermCodec.TAG_IRI_SHORT_PREFIX);
     }
 

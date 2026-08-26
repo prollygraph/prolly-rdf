@@ -1,0 +1,5 @@
+# W3C SPARQL 1.1 SYNTAX conformance — known-failures baseline.
+# Wired 2026-08-25 (roadmap T3). The suite runs 160/160 green; this file exists
+# so the ratchet is FILE-GOVERNED like its siblings: a parser regression must
+# either be fixed or deliberately baselined here (raising SYNTAX_MAX in
+# KnownFailuresBaselineTest) — never silently skipped.
