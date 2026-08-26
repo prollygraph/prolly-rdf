@@ -160,9 +160,20 @@ public final class RemotesStore {
         }
         Files.createDirectories(requireDir());
         Path file = requireDir().resolve(name);
-        Path tmp = file.resolveSibling(name + ".tmp");
-        Files.writeString(tmp, url + "\n", StandardCharsets.UTF_8);
-        Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        // A temp path derived from the NAME is a race: two concurrent puts of the same remote both
+        // write "<name>.tmp", the first mover renames it away, and the second fails with
+        // NoSuchFileException having written nothing. Found by TagRemotesConcurrencyTest. The temp
+        // must be unique per writer, and must stay in the same directory for ATOMIC_MOVE to hold.
+        // It still ends in ".tmp" so the directory listing below keeps skipping it.
+        Path tmp = Files.createTempFile(requireDir(), name + ".", ".tmp");
+        try {
+            Files.writeString(tmp, url + "\n", StandardCharsets.UTF_8);
+            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException | RuntimeException failed) {
+            Files.deleteIfExists(tmp); // never leave a stray temp behind on the failure path
+            throw failed;
+        }
     }
 
     /** Remove a remote. Returns {@code true} if it existed. */
@@ -258,9 +269,18 @@ public final class RemotesStore {
     private void writeBindings(Map<String, String> bindings) throws IOException {
         Path file = bindingsFile();
         Files.createDirectories(file.getParent());
-        Path tmp = file.resolveSibling(BINDINGS_FILENAME + ".tmp");
-        Files.writeString(tmp, encodeFlatJson(bindings), StandardCharsets.UTF_8);
-        Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        // Same fixed-temp race as put() above, and worse here: the bindings file is global, so
+        // EVERY concurrent binding write collides on one temp path rather than only writers of the
+        // same remote. Unique temp per writer, same directory so ATOMIC_MOVE still applies.
+        Path tmp = Files.createTempFile(file.getParent(), BINDINGS_FILENAME + ".", ".tmp");
+        try {
+            Files.writeString(tmp, encodeFlatJson(bindings), StandardCharsets.UTF_8);
+            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException | RuntimeException failed) {
+            Files.deleteIfExists(tmp);
+            throw failed;
+        }
     }
 
     /**
