@@ -1,0 +1,16 @@
+# Query-shape divergences RULED as upstream-memory bugs (prolly correct) — the
+# governed exclusion list for SailQueryDifferentialProperty. One shape per line
+# with its ruling reference; the cap (KNOWN_DIVERGENCES_MAX) may only rise with
+# a written ruling in the property's javadoc lineage. EMPTY is the goal state.
+zero-length-capable path (* or ?) under GRAPH ?g — RULED upstream-memory bug 2026-08-25:
+  MemoryStore's ZeroLengthPathIteration/PathIteration dedup graph-blindly, so a term in
+  several named graphs keeps zero-length rows only for the first graph its scan surfaces;
+  ProllySail emits the per-graph rows W3C (pp35) expects — the conformance-round-2 fix,
+  verified there against the W3C expected results. Enforcement: the oracle's
+  isKnownDivergentShape() predicate (over-broad on purpose: any */? path inside GRAPH ?g).
+same variable at both endpoints of a zero-length-capable path (?v p*|p? ?v) — RULED reference-side crash 2026-08-25:
+  upstream ZeroLengthPathIteration binds the shared variable twice; under the test JVM's -ea
+  the REFERENCE MemoryStore dies with 'variable already bound' (production masks it only via
+  disabled assertions). ProllySail handles the shape (round-2 guard in
+  GraphScopedZeroLengthPathIteration; probe: correct vertex-set rows incl. self-loop data).
+  Enforcement: isKnownDivergentShape() same-var regex.
