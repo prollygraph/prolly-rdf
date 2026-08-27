@@ -165,6 +165,92 @@ class DictionaryFindTermIdTest {
 
     // ---- across commit ----
 
+    /**
+     * Delegating store that counts reads — the only way to observe probe COUNT, not just answer.
+     */
+    private static final class CountingStore implements NodeStore {
+        private final NodeStore delegate;
+        long reads;
+
+        CountingStore(NodeStore delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Optional<MemorySegment> read(byte[] hash) {
+            reads++;
+            return delegate.read(hash);
+        }
+
+        @Override
+        public byte[] write(MemorySegment data) {
+            return delegate.write(data);
+        }
+
+        @Override
+        public byte[] write(byte[] data) {
+            return delegate.write(data);
+        }
+    }
+
+    /**
+     * An absent term must stop at the FIRST EMPTY salt slot, not walk all {@code MAX_SALT} of them.
+     *
+     * <p>{@code encode} places a term at the first empty-or-matching slot, so if salt 0 is empty
+     * the term was never inserted at any salt — and {@link Dictionary} exposes no delete, so no
+     * chain can be broken by a removal. Continuing past an empty slot therefore cannot find
+     * anything; it just costs 64x.
+     *
+     * <p>Asserted as a RATIO against a hit rather than an absolute read count, so the test does not
+     * encode the tree's depth and keeps meaning as the dictionary grows. Measured on the real NCIt
+     * dictionary before this was fixed, an all-miss probe cost 2,081.9 us against 365.4 us for the
+     * salt-0-only equivalent — 5.7x — and 49x the block reads of a hit ({@code
+     * quarkus-ontology-editor: docs/benchmarks/prolly-bloom-proof.md}).
+     */
+    @Test
+    void findTermId_of_an_absent_term_stops_at_the_first_empty_slot() {
+        try (Arena a = Arena.ofConfined()) {
+            CountingStore counting = new CountingStore(new InMemoryNodeStore());
+            Dictionary d1 = new Dictionary(counting, pool, HashFunctions.defaultHash());
+            // Enough terms that the dictionary tree has real depth. A one-entry tree is a single
+            // root node the StaticMap already holds, so NOTHING is ever read from the store and
+            // the comparison below is vacuously true at 0 == 0 — which is exactly how the first
+            // version of this test passed against the unfixed code.
+            MemorySegment present = null;
+            for (int i = 0; i < 5_000; i++) {
+                MemorySegment term = TermCodec.encodeAnyURI("http://example.org/t/" + i, a);
+                d1.encode(term);
+                if (i == 2_500) {
+                    present = term;
+                }
+            }
+            StaticMap committed = d1.commit();
+
+            Dictionary d2 = new Dictionary(counting, pool, HashFunctions.defaultHash(), committed);
+            MemorySegment absent = TermCodec.encodeAnyURI("http://example.org/never-encoded", a);
+
+            counting.reads = 0;
+            assertTrue(d2.findTermId(present).isPresent(), "guard: the present term must be found");
+            long hitReads = counting.reads;
+
+            counting.reads = 0;
+            assertTrue(d2.findTermId(absent).isEmpty(), "guard: the absent term must not be found");
+            long missReads = counting.reads;
+
+            assertTrue(
+                    hitReads > 0,
+                    "guard: a hit must read at least one node, or this test "
+                            + "compares 0 against 0 and cannot fail");
+            assertTrue(
+                    missReads <= hitReads * 2,
+                    "a miss must stop at the first empty slot, not walk every salt: "
+                            + missReads
+                            + " store reads for a miss against "
+                            + hitReads
+                            + " for a hit");
+        }
+    }
+
     @Test
     void findTermId_resolves_terms_on_a_reopened_committed_dictionary() {
         try (Arena a = Arena.ofConfined()) {

@@ -244,11 +244,18 @@ public final class Dictionary {
                 pool.release(keyBlock);
             }
             if (existing.isEmpty()) {
-                // Empty slot at this salt means the term hasn't been inserted at
-                // this hash address. It might exist at a later salt (only if an
-                // earlier write produced a collision and walked there) — keep
-                // looking.
-                continue;
+                // An empty slot PROVES absence, so stop rather than walking the rest of the chain.
+                // `encode` places a term at the first empty-or-matching slot, so a term present at
+                // salt s has salts 0..s-1 all OCCUPIED by byte-different terms; reaching an empty
+                // slot means this term was never inserted at any salt. Walking on cannot find it,
+                // and costs up to MAX_SALT lookups instead of one — measured at 64x the store
+                // reads for a miss (128 against 2 in DictionaryFindTermIdTest), and 2,081.9 us
+                // against 365.4 us per probe on the 3.08M-term NCIt dictionary.
+                //
+                // PRECONDITION: this holds only while the dictionary is APPEND-ONLY. There is no
+                // delete today. If one is ever added, an erased slot would break the chain and
+                // this early return must go with it, or gain a tombstone.
+                return Optional.empty();
             }
             if (Compare.compareUnsigned(existing.get(), encodedTerm) == 0) {
                 return Optional.of(tid);
