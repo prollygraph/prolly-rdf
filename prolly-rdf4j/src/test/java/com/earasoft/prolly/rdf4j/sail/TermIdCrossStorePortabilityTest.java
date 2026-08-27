@@ -55,8 +55,8 @@ import org.junit.jupiter.api.io.TempDir;
  * <p>Today it does not, and the reason is incidental rather than designed: {@code TermEncoder}
  * emits only the {@code 0x82} FULL-IRI form, so an IRI's encoded bytes — and therefore its hash —
  * are independent of the store's {@code PrefixTable}. That encoder's own javadoc says a
- * PrefixTable-aware encoder preferring the {@code 0x80} short-prefix form <b>arrives later
- * (Phase 2 Sail integration)</b>.
+ * PrefixTable-aware encoder preferring the {@code 0x80} short-prefix form <b>arrives later (Phase 2
+ * Sail integration)</b>.
  *
  * <p><b>That change would break this silently.</b> A prefix-compressed IRI encodes differently
  * depending on the interning store's prefix table, so the same IRI would carry different TermIds in
@@ -65,8 +65,8 @@ import org.junit.jupiter.api.io.TempDir;
  * exists so that lands as a red test rather than as a wrong ontology months later.
  *
  * <p>If you are here because this test failed after making the encoder prefix-aware: the property
- * is genuinely gone, and every cross-store TermId consumer needs a per-store translation step.
- * Do not delete this test — change it to assert the new contract and tell the consumers.
+ * is genuinely gone, and every cross-store TermId consumer needs a per-store translation step. Do
+ * not delete this test — change it to assert the new contract and tell the consumers.
  *
  * <p>A second, narrower hazard is <b>not</b> covered here because it is not deterministically
  * reproducible: {@code Dictionary.encode} walks a salt chain on hash collision, so a term that
@@ -80,12 +80,16 @@ class TermIdCrossStorePortabilityTest {
     private static final TupleDescriptor SCHEMA_INT64 =
             new TupleDescriptor(List.of(new Type(Encoding.Int64, false)));
 
-    /** Deliberately mixed: a long shared-prefix IRI, a well-known vocabulary term, a short one, a URN. */
-    private static final List<String> SHARED = List.of(
-            "http://purl.obolibrary.org/obo/NCIT_C107687",
-            "http://www.w3.org/2000/01/rdf-schema#label",
-            "http://example.org/a",
-            "urn:x#Zebra");
+    /**
+     * Deliberately mixed: a long shared-prefix IRI, a well-known vocabulary term, a short one, a
+     * URN.
+     */
+    private static final List<String> SHARED =
+            List.of(
+                    "http://purl.obolibrary.org/obo/NCIT_C107687",
+                    "http://www.w3.org/2000/01/rdf-schema#label",
+                    "http://example.org/a",
+                    "urn:x#Zebra");
 
     @Test
     void theSameIriResolvesToTheSameTermIdInTwoDifferentStores(@TempDir Path dir) throws Exception {
@@ -100,9 +104,16 @@ class TermIdCrossStorePortabilityTest {
             String iri = SHARED.get(i);
             assertNotEquals(Long.MIN_VALUE, a[i], iri + " was not interned in store A");
             assertNotEquals(Long.MIN_VALUE, b[i], iri + " was not interned in store B");
-            assertEquals(a[i], b[i],
-                    "TermId for " + iri + " differs between stores (A=" + Long.toHexString(a[i])
-                            + " B=" + Long.toHexString(b[i]) + ") — a cross-store TermId union is"
+            assertEquals(
+                    a[i],
+                    b[i],
+                    "TermId for "
+                            + iri
+                            + " differs between stores (A="
+                            + Long.toHexString(a[i])
+                            + " B="
+                            + Long.toHexString(b[i])
+                            + ") — a cross-store TermId union is"
                             + " no longer sound; see this test's javadoc");
         }
     }
@@ -110,8 +121,14 @@ class TermIdCrossStorePortabilityTest {
     private static long[] idsAfterIngest(Path dir, int filler, String fillerNs) throws Exception {
         try (RocksNodeStore store = new RocksNodeStore(dir.toString())) {
             HeapBufferPool pool = new HeapBufferPool();
-            SailRepository repo = new SailRepository(new ProllySail(store, pool,
-                    RootMetaTreeStore.beside(dir), CommitLog.beside(dir), RefsStore.beside(dir)));
+            SailRepository repo =
+                    new SailRepository(
+                            new ProllySail(
+                                    store,
+                                    pool,
+                                    RootMetaTreeStore.beside(dir),
+                                    CommitLog.beside(dir),
+                                    RefsStore.beside(dir)));
             repo.init();
             try (RepositoryConnection conn = repo.getConnection()) {
                 conn.begin();
@@ -129,21 +146,30 @@ class TermIdCrossStorePortabilityTest {
             }
             repo.shutDown();
 
-            byte[] head = RootMetaTreeStore.beside(dir).get()
-                    .orElseThrow(() -> new IllegalStateException("no committed metatree"));
+            byte[] head =
+                    RootMetaTreeStore.beside(dir)
+                            .get()
+                            .orElseThrow(() -> new IllegalStateException("no committed metatree"));
             RootMetaTree mt = RootMetaTree.readFrom(store, head).orElseThrow();
-            StaticMap dictMap = mt.hashOf(RootMetaTree.NAME_DICT)
-                    .map(h -> new StaticMap(store,
-                            Node.fromBytes(store.read(h).orElseThrow()), SCHEMA_INT64))
-                    .orElseThrow(() -> new IllegalStateException("no dictionary root"));
+            StaticMap dictMap =
+                    mt.hashOf(RootMetaTree.NAME_DICT)
+                            .map(
+                                    h ->
+                                            new StaticMap(
+                                                    store,
+                                                    Node.fromBytes(store.read(h).orElseThrow()),
+                                                    SCHEMA_INT64))
+                            .orElseThrow(() -> new IllegalStateException("no dictionary root"));
             Dictionary dict = new Dictionary(store, pool, HashFunctions.defaultHash(), dictMap);
 
             long[] out = new long[SHARED.size()];
             try (Arena arena = Arena.ofConfined()) {
                 for (int i = 0; i < SHARED.size(); i++) {
-                    out[i] = DictionaryTermEncoder
-                            .findTermId(VF.createIRI(SHARED.get(i)), dict, arena)
-                            .map(TermId::value).orElse(Long.MIN_VALUE);
+                    out[i] =
+                            DictionaryTermEncoder.findTermId(
+                                            VF.createIRI(SHARED.get(i)), dict, arena)
+                                    .map(TermId::value)
+                                    .orElse(Long.MIN_VALUE);
                 }
             }
             return out;
