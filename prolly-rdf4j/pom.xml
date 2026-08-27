@@ -250,7 +250,7 @@
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
-        <version>0.8.14</version>
+        <version>0.8.15</version>
         <configuration>
           <!-- com.earasoft.prolly.rdf4j.examples.* are runnable usage demos,
                not product code — exclude them from the coverage figure. -->
@@ -386,7 +386,7 @@
       <plugin>
         <groupId>org.pitest</groupId>
         <artifactId>pitest-maven</artifactId>
-        <!-- 1.25.4 (2026-06-09), bumped from 1.16.1 for Java 25. 1.16.1's shaded
+        <!-- 1.25.9 (2026-06-09), bumped from 1.16.1 for Java 25. 1.16.1's shaded
              ASM (relocated org.objectweb.asm -> org.pitest.reloc.asm) predates
              class-file v69 and threw `Unsupported class file major version 69`
              once the toolchain moved to Java 25 (2026-06-05) — the mutation gate
@@ -395,13 +395,13 @@
              the only fix is a pitest whose own bundle is v69-aware. 1.25.4's
              parent pom pins asm.version=9.9.1, which defines V25=69 (verified).
              prolly-rdf4j-test-strategy Step 30 / follow-ons Step 5. -->
-        <version>1.25.4</version>
+        <version>1.25.9</version>
         <dependencies>
           <dependency>
             <groupId>org.pitest</groupId>
             <artifactId>pitest-junit5-plugin</artifactId>
             <!-- Stays 1.2.3: it declares pitest as `provided` (build-time target
-                 1.15.2), so at runtime it binds to the host pitest 1.25.4 above;
+                 1.15.2), so at runtime it binds to the host pitest 1.25.9 above;
                  the test-plugin SPI is stable across that range. -->
             <version>1.2.3</version>
           </dependency>
@@ -410,27 +410,27 @@
           <dependency>
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-launcher</artifactId>
-            <version>6.0.3</version>
+            <version>6.1.3</version>
           </dependency>
           <dependency>
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-engine</artifactId>
-            <version>6.0.3</version>
+            <version>6.1.3</version>
           </dependency>
           <dependency>
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-commons</artifactId>
-            <version>6.0.3</version>
+            <version>6.1.3</version>
           </dependency>
           <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>6.0.3</version>
+            <version>6.1.3</version>
           </dependency>
           <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>6.0.3</version>
+            <version>6.1.3</version>
           </dependency>
         </dependencies>
         <configuration>
@@ -449,7 +449,7 @@
                with headroom. Mutation testing is run explicitly (not per-build);
                this guards that run. Baseline first measured 2026-05-29; the gate
                went dark 2026-06-05 when the Java 25 bump broke pitest 1.16.1, and
-               was restored 2026-06-11 by the pitest 1.25.4 bump — re-measured
+               was restored 2026-06-11 by the pitest 1.25.9 bump — re-measured
                identical (209/182/87%/91%), because the value/ code + tests are
                unchanged so the score is deterministic. Kept at 80, not ratcheted:
                the score is unchanged from baseline, so the original headroom

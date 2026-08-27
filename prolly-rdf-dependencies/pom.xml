@@ -56,32 +56,32 @@
   <properties>
     <rocksdb.version>8.10.0</rocksdb.version>
     <flatbuffers.version>23.5.26</flatbuffers.version>
-    <caffeine.version>3.1.8</caffeine.version>
-    <jqwik.version>1.9.2</jqwik.version>
+    <caffeine.version>3.2.4</caffeine.version>
+    <jqwik.version>1.10.1</jqwik.version>
     <!-- jspecify: the tool-neutral nullness annotation standard (@Nullable /
          @NullMarked) for the NullAway null-safety migration (plans/null-safety-migration.md
          D-3). NullAway, ErrorProne, IntelliJ and the Checker Framework all honor it.
          Compile-scoped + BOM-managed so each module annotated in the rollout adds the
          dep without a version. CLASS-retention annotations — present at compile, never
          loaded at runtime. -->
-    <jspecify.version>1.0.0</jspecify.version>
+    <jspecify.version>1.0.1</jspecify.version>
     <!-- Consolidated from 5 child poms (rdf4j) / 2 child poms (slf4j) that each
          declared their own copy — single value here now (ADR-0042 D-3, plan Step 2b). -->
     <rdf4j.version>5.1.4</rdf4j.version>
-    <slf4j.version>2.0.17</slf4j.version>
+    <slf4j.version>2.0.18</slf4j.version>
     <!-- logback aligned to Spring Boot 4.0.6 (its BOM ships 1.5.32). Pinned here
          to override rdf4j-bom 5.1.4, which transitively drags the OLD pair
          logback 1.2.13 + slf4j 1.7.36 — incompatible with Boot 4's
          RootLogLevelConfigurator (compiled against the logback/slf4j-2.x
          Configurator interface) → AbstractMethodError at logging init. See
          prolly-platform-rest/plans/align-slf4j-logback-spring-boot4.md. -->
-    <logback.version>1.5.32</logback.version>
+    <logback.version>1.6.3</logback.version>
     <!-- log4j2 bridge aligned to Spring Boot 4.0.6 (its BOM ships 2.25.4). Same
          rdf4j-bom 5.1.4 drag as logback: it pins log4j-api + log4j-to-slf4j to the
          old 2.17.2, and the 2.17.2 log4j-to-slf4j bridge is built against slf4j
          1.7 — once slf4j is 2.x it fails to initialize log4j-api's LogManager
          (NoClassDefFoundError via commons-logging's Log4jApiLogFactory). -->
-    <log4j2.version>2.25.4</log4j2.version>
+    <log4j2.version>2.26.1</log4j2.version>
     <!-- jackson-annotations (the com.fasterxml.* artifact shared between Jackson 2
          and Jackson 3) aligned to Spring Boot 4.0.6. Boot 4 ships Jackson 3.x
          (tools.jackson.*), whose databind still reads annotations from this 2.x
@@ -89,14 +89,14 @@
          2.13.5 → ClassNotFoundException at Jackson-3 mapper init. Only the
          annotations artifact is pinned (no 2.21 release of core/databind exists;
          annotations >= databind is Jackson-supported). See align-jackson-spring-boot4.md. -->
-    <jackson-annotations.version>2.21</jackson-annotations.version>
+    <jackson-annotations.version>2.22</jackson-annotations.version>
     <!-- Mockito aligned to Spring Boot 4.0.6 (its BOM ships 5.20.0). rdf4j-bom 5.1.4
          drags the old 4.11.0, whose default subclass mock-maker cannot mock final
          classes. Mockito 5's default IS the inline mock-maker, so this fixes
          final-class mocking everywhere AND makes the per-module
          mockito-extensions/MockMaker config redundant (now removed). See the
          align-jackson-spring-boot4.md follow-up. -->
-    <mockito.version>5.20.0</mockito.version>
+    <mockito.version>5.23.0</mockito.version>
     <!-- JUnit aligned to Spring Boot 4.0.6 (its BOM imports junit-bom 6.0.3, and
          junit-platform 6.0.3 is already the test runner here). rdf4j-bom 5.1.4 drags
          the JUPITER artifacts back to 5.9.3, leaving jupiter-api 5.9.3 skewed under
@@ -104,7 +104,7 @@
          NoSuchMethodError: ExtensionContext$Store.computeIfAbsent on any @SpringBootTest
          full-context load. Imported below as the junit-bom so every junit-* artifact
          stays one consistent version. -->
-    <junit.version>6.0.3</junit.version>
+    <junit.version>6.1.3</junit.version>
   </properties>
 
   <dependencyManagement>
@@ -264,7 +264,7 @@
       <dependency>
         <groupId>io.micrometer</groupId>
         <artifactId>micrometer-core</artifactId>
-        <version>1.16.5</version>
+        <version>1.17.1</version>
       </dependency>
       <!-- jspecify nullness annotations (@Nullable / @NullMarked) for the NullAway
            null-safety migration (plans/null-safety-migration.md D-3). Managed here so
