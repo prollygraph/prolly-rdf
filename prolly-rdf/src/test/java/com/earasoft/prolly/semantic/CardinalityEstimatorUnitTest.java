@@ -64,6 +64,101 @@ class CardinalityEstimatorUnitTest {
         return new StaticMap(store, root, STRING_DESC);
     }
 
+    /** A leading Int64 column — the shape whose bytes do NOT order like its tree. */
+    private static final TupleDescriptor ID_LABEL_DESC =
+            new TupleDescriptor(
+                    List.of(new Type(Encoding.Int64, false), new Type(Encoding.String, false)));
+
+    private static MemorySegment idLabelKey(HeapBufferPool pool, long id, String label) {
+        TupleBuilder tb = new TupleBuilder(pool);
+        tb.putInt64(0, id);
+        tb.putField(1, label.getBytes());
+        return tb.build().segment();
+    }
+
+    private static MemorySegment idPrefix(HeapBufferPool pool, long id) {
+        TupleBuilder tb = new TupleBuilder(pool);
+        tb.putInt64(0, id);
+        return tb.build().segment();
+    }
+
+    /** ids 1..3, four labels each — twelve keys, four under each id. */
+    private static StaticMap idLabelTree(HeapBufferPool pool, InMemoryNodeStore store) {
+        TreeMutator m = new TreeMutator(store, ID_LABEL_DESC, pool);
+        List<TreeMutator.Mutation> edits = new ArrayList<>();
+        for (long id = 1; id <= 3; id++) {
+            for (int j = 0; j < 4; j++) {
+                edits.add(
+                        new TreeMutator.Mutation(
+                                idLabelKey(pool, id, "label-" + j),
+                                MemorySegment.ofArray(("v" + id + j).getBytes())));
+            }
+        }
+        return new StaticMap(store, m.applyMutations(null, edits.iterator()), ID_LABEL_DESC);
+    }
+
+    /**
+     * {@code estimatePrefix} walks the tree by RAW BYTE comparison ({@code Cursor.atRawKey}), which
+     * is only the tree's own ordering when the descriptor asks for binary parity or every column is
+     * byte-compared. It is not, for the four encodings {@code TypeCodec.compareAt} handles
+     * numerically — {@code Int64}, {@code Int32}, {@code Float64}, {@code Float32} — which it reads
+     * LITTLE-endian and compares with {@code Long.compare}/etc. {@code encodeInt64}'s
+     * big-endian-plus-sign-flip layout, the one that does order lexicographically, is written only
+     * under binary parity.
+     *
+     * <p>So on an Int64-keyed tree the descent lands in the wrong subtree and the difference of two
+     * wrong ordinals comes back as a plausible number. It cost a downstream Gate run before anyone
+     * noticed, because 0 is exactly what "no matches" looks like.
+     *
+     * <p>Refusing is the fix rather than a typed prefix API: {@code estimateRange} between two
+     * one-field tuples already answers this correctly and is what the only production consumer
+     * ({@code SelectivityVariableOrder}) uses. {@code estimatePrefix} has no production caller at
+     * all.
+     */
+    @Test
+    void estimatePrefix_refuses_a_tree_whose_bytes_do_not_order_like_its_keys() {
+        try (HeapBufferPool pool = new HeapBufferPool();
+                InMemoryNodeStore store = new InMemoryNodeStore()) {
+            CardinalityEstimator est = new CardinalityEstimator(idLabelTree(pool, store));
+            MemorySegment prefix = idPrefix(pool, 2L);
+
+            UnsupportedOperationException thrown =
+                    assertThrows(
+                            UnsupportedOperationException.class, () -> est.estimatePrefix(prefix));
+            assertTrue(
+                    thrown.getMessage().contains("estimateRange"),
+                    "the message must name the method that DOES answer this: " + thrown);
+        }
+    }
+
+    /** The true answer, for comparison — and proof the tree really holds four keys under id 2. */
+    @Test
+    void estimateRange_answers_the_question_estimatePrefix_refuses() {
+        try (HeapBufferPool pool = new HeapBufferPool();
+                InMemoryNodeStore store = new InMemoryNodeStore()) {
+            CardinalityEstimator est = new CardinalityEstimator(idLabelTree(pool, store));
+            assertEquals(
+                    4,
+                    est.estimateRange(idPrefix(pool, 2L), idPrefix(pool, 3L)),
+                    "two one-field tuples, compared by the descriptor: a short tuple sorts before "
+                            + "every longer key sharing it, so this brackets id 2 exactly");
+        }
+    }
+
+    /** A byte-ordered descriptor is still served — the guard must not be a blanket refusal. */
+    @Test
+    void estimatePrefix_still_works_where_bytes_and_keys_agree() {
+        try (HeapBufferPool pool = new HeapBufferPool();
+                InMemoryNodeStore store = new InMemoryNodeStore()) {
+            CardinalityEstimator est = new CardinalityEstimator(tree(pool, store, 200));
+            assertEquals(
+                    200,
+                    est.estimatePrefix(MemorySegment.ofArray("k-".getBytes())),
+                    "String is compared with compareRangeUnsigned, so raw byte order IS the "
+                            + "tree's order here and the raw descent is sound");
+        }
+    }
+
     // ---- null-root semantics ----
 
     @Test

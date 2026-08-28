@@ -24,7 +24,9 @@ import com.earasoft.prolly.storage.*;
 import com.earasoft.prolly.sync.*;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import java.util.EnumSet;
 import java.util.Objects;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -38,17 +40,19 @@ import org.jspecify.annotations.Nullable;
  * number of keys in the range. A prefix estimate is the same trick applied to the half-open
  * interval from the prefix to its byte-wise increment.
  *
- * @apiNote {@link #estimateRange} bounds a key range; {@link #estimatePrefix} bounds the keys
- *     sharing a byte prefix (used to size a pattern's matches before joining). Both return 0 for an
- *     empty tree and clamp a negative difference to 0. The figure is exact for the counts the tree
- *     stores, not sampled — it is called an "estimate" because callers use it as a planning
- *     heuristic, not because it approximates.
+ * @apiNote {@link #estimateRange} bounds a key range and is the general answer; {@link
+ *     #estimatePrefix} bounds the keys sharing a RAW BYTE prefix and only works on trees whose byte
+ *     order is their key order — it throws otherwise rather than returning a plausible wrong
+ *     number, see its own doc. Both return 0 for an empty tree and clamp a negative difference to
+ *     0. The figure is exact for the counts the tree stores, not sampled — it is called an
+ *     "estimate" because callers use it as a planning heuristic, not because it approximates.
  * @implNote <b>Collaborators:</b> a {@link StaticMap} (the constructor pulls its {@link NodeStore},
  *     root {@link Node}, and {@link TupleDescriptor}), {@link Cursor} (positions at a key to read
  *     its ordinal), and {@link ByteUtils} (the prefix increment). It relies on {@link
  *     Node#treeCount()} and the per-node subtree counts being correct. <b>Dependents:</b> the join
  *     planner — {@code SelectivityVariableOrder} / {@code VariableOrderHeuristic} — which orders
- *     join variables by estimated selectivity.
+ *     join variables by estimated selectivity, and does so through {@link #estimateRange}. {@link
+ *     #estimatePrefix} has no production caller.
  */
 public class CardinalityEstimator {
     private final NodeStore store;
@@ -70,8 +74,33 @@ public class CardinalityEstimator {
         return Math.max(0, posB - posA);
     }
 
+    /**
+     * Keys sharing a raw byte prefix — <b>valid only where raw byte order IS the tree's order</b>.
+     *
+     * <p>This descends with {@link Cursor#atRawKey}, comparing bytes, while the tree was built by
+     * {@link TupleDescriptor#compare}. Those agree when the descriptor asks for binary parity (the
+     * builder bit-flipped numeric fields into big-endian so their bytes sort correctly) or when
+     * every column is one {@code TypeCodec.compareAt} falls through to an unsigned byte compare —
+     * {@code Uint*}, {@code String}, {@code Bytes}, and the rest.
+     *
+     * <p>They do NOT agree for the four encodings {@code compareAt} handles numerically: {@code
+     * Int64}, {@code Int32}, {@code Float64}, {@code Float32}, which it reads
+     * <em>little-endian</em> and compares with {@code Long.compare} and friends. On such a tree the
+     * raw descent lands in the wrong subtree and the difference of two wrong ordinals is returned
+     * as a perfectly plausible count — measured at <b>0 where the answer was 4</b>. That is the
+     * worst failure available: 0 is exactly what "no matches" looks like, and it cost a downstream
+     * Gate run before anyone questioned it.
+     *
+     * <p>So this refuses. It does not attempt a typed-prefix fix, because {@link #estimateRange}
+     * between two short tuples already answers the same question correctly for any descriptor — a
+     * k-field tuple sorts before every longer key sharing it — and is what the only production
+     * consumer uses.
+     *
+     * @throws UnsupportedOperationException if the descriptor's bytes do not order like its keys
+     */
     public long estimatePrefix(MemorySegment prefix) {
         if (root == null) return 0;
+        requireByteOrderedKeys();
         byte[] startBytes = prefix.toArray(ValueLayout.JAVA_BYTE);
         byte[] endBytes = ByteUtils.increment(startBytes);
 
@@ -82,6 +111,33 @@ public class CardinalityEstimator {
                         : getOrdinal(MemorySegment.ofArray(endBytes), true);
 
         return Math.max(0, posB - posA);
+    }
+
+    /**
+     * The encodings {@code TypeCodec.compareAt} compares NUMERICALLY from little-endian bytes, so
+     * their byte order is not their value order. Everything else falls through to {@code
+     * compareRangeUnsigned}, which is byte order by definition.
+     */
+    private static final Set<Encoding> NOT_BYTE_ORDERED =
+            EnumSet.of(Encoding.Int64, Encoding.Int32, Encoding.Float64, Encoding.Float32);
+
+    private void requireByteOrderedKeys() {
+        if (descriptor.isBinaryParity()) return;
+        for (int i = 0; i < descriptor.size(); i++) {
+            Encoding enc = descriptor.typeAt(i).encoding();
+            if (NOT_BYTE_ORDERED.contains(enc)) {
+                throw new UnsupportedOperationException(
+                        "estimatePrefix walks this tree by RAW BYTE comparison, but column "
+                                + i
+                                + " is "
+                                + enc
+                                + ", which the descriptor compares numerically from little-endian"
+                                + " bytes — the descent would land in the wrong subtree and return a"
+                                + " plausible wrong count rather than fail. Use estimateRange"
+                                + " between two tuples built from this descriptor, or build the tree"
+                                + " with a binary-parity descriptor.");
+            }
+        }
     }
 
     private long getOrdinal(MemorySegment key, boolean isRaw) {
