@@ -448,11 +448,25 @@ Design targets (JMH bars; **not wired as a CI job in this repo** — the gated b
 
 ```
 sail.add | sail.remove | sail.get | sail.commit | sail.rollback
-index.{spoc|posc|ospc|cspo}.insert
-index.{...}.delete
-index.{...}.scan.examined  / .scan.emitted
-planner.choice.{ORDER}.prefix{0|1|2|3}
+index.{spoc|posc|ospc|cspo}.insert        <- dotted meter NAME
+index.{...}.delete                        <- dotted meter NAME
+index          tag name={spoc|...}.scan.examined  /  .scan.emitted
+planner.choice tag choice={ORDER}.prefix{0|1|2|3}
 ```
+
+**The last two are meter name + TAG, not dotted names, and the difference bites.**
+`insertMetricKey`/`deleteMetricKey` really are the dotted strings above
+(`QuadOrder.java:46-49`), but the scan counters are built as
+`counter("index", "name", order + ".scan.examined")`
+(`ProllySailConnection.java:1036-1041`) and the planner's as
+`counter("planner.choice", "choice", order + ".prefix" + n)` (`IndexPlanner.java:92-93`).
+A test that looks up `"index.spoc.scan.examined"` finds no meter, and the usual
+`counter == null ? 0d` helper turns that into a passing assertion against nothing. Use
+`registry.find("index").tag("name", "spoc.scan.examined")`.
+
+**The scan counters publish only on exhaustion.** The increments sit after the `while` loop in
+`filterByLogical`'s `hasNext()`, and closing the iteration does not drain it — so a `LIMIT` or an
+early `break` records nothing. Drain before asserting.
 
 ### Durations (nanoseconds, with sample counts)
 
@@ -476,7 +490,7 @@ sail.commit.total
 
 - **Debug what the planner is doing**: enable `InMemorySailMetrics`, run a query, dump counters — see exactly which index served each pattern.
 - **Microbenchmark commit phases**: run a write workload, read `sail.commit.dict` vs `sail.commit.indexes` to see which table dominates commit cost.
-- **Scan-efficiency check**: `index.X.scan.examined` ÷ `index.X.scan.emitted` is the post-filter waste ratio for a query pattern. High ratios → planner picked the wrong index or post-filter is doing too much work.
+- **Scan-efficiency check**: `index{name=X.scan.examined}` ÷ `index{name=X.scan.emitted}` is the post-filter waste ratio for a query pattern. High ratios → planner picked the wrong index or post-filter is doing too much work. This is not hypothetical: it is how the dropped-context defect was found and how the fix is pinned — a graph-scoped read used to report `spoc.scan.examined` equal to the whole store for a handful emitted, and now reports `cspo.scan.examined` equal to the rows in that graph (`ProllySailContextPushdownTest`).
 
 ### Future extension points
 

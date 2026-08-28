@@ -973,7 +973,14 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
         TermId pId = p == null ? null : encodeTerm(p);
         TermId oId = o == null ? null : encodeTerm(o);
 
-        QuadIndex chosen = plannerTx.choose(sId, pId, oId, null);
+        // The graph is resolved BEFORE planning, not after. It used to be read only at the
+        // post-filter below, so a query bound solely on context constrained nothing: all four
+        // orders tied at prefix 0 and the seek was the whole store. CSPO exists for exactly this
+        // shape.
+        Set<TermId> wantedCtx = wantedContexts(ctxs);
+        TermId seekCtx = seekableContext(wantedCtx);
+
+        QuadIndex chosen = plannerTx.choose(sId, pId, oId, seekCtx);
         // Read-your-own-writes: the scan path reads the index's committed
         // StaticMap, not its in-transaction MutableMap buffer. Flush the
         // pending buffer first so this read reflects same-transaction
@@ -981,13 +988,47 @@ public class ProllySailConnection extends AbstractNotifyingSailConnection {
         // unchanged when nothing is pending, so read-only transactions
         // pay nothing.
         chosen.commit();
-        Iterator<SpocKey> base = chosen.scan(sId, pId, oId, null);
+        Iterator<SpocKey> base = chosen.scan(sId, pId, oId, seekCtx);
 
-        Set<TermId> wantedCtx = wantedContexts(ctxs);
+        // The filter stays even when the seek used the context: leadingPrefixLength caps at 3
+        // (iterPrefix rejects a 4-column prefix), so the last column is always checked here, and
+        // the multi-context case below is served by the filter alone.
         Iterator<SpocKey> filtered =
                 filterByLogical(base, chosen.order(), sId, pId, oId, wantedCtx);
 
         return new SpocStatementIteration(filtered, chosen.order());
+    }
+
+    /**
+     * The single graph a seek prefix can be built from, or {@code null} to plan without one.
+     *
+     * <p>Two exclusions, and both are load-bearing.
+     *
+     * <p><b>Read the deduped SET, never {@code ctxs.length}.</b> {@link #wantedContexts} collapses
+     * duplicates, so {@code {g, g}} really is one graph and deserves the seek, while {@code {null,
+     * g}} is two and cannot be expressed as one prefix. The seek term and the filter set must come
+     * from the same collection: derive them from different quantities and the scan silently
+     * excludes rows the filter would have admitted — a wrong answer, not a slow one.
+     *
+     * <p><b>Never seek the default-graph sentinel.</b> {@code TermId.ZERO} is deliberately not
+     * counted by {@code insertEverywhere} ({@code if (!cId.equals(TermId.ZERO))}), and {@code
+     * TermStats} answers 0 for a term it has never seen, so the planner's selectivity tie-break
+     * rates ZERO the rarest term in the store — permanently. Push it and {@code getStatements(null,
+     * p, null, false, (Resource) null)} abandons a POSC prefix on the predicate for a CSPO seek on
+     * ZERO, which walks every statement that has no graph. In a store that uses one graph that is
+     * the whole store: worse than the defect this method just fixed, on a different axis.
+     *
+     * <p>This is a deliberate divergence from {@code RocksDbFlatSailConnection}, which does pass
+     * the sentinel — it can, because {@code FlatIndexSelector} ranks on prefix length alone with no
+     * stats tie-break. Aligning the two sails without also fixing the frequency of an uncounted
+     * term would reintroduce the regression above.
+     */
+    private static @Nullable TermId seekableContext(@Nullable Set<TermId> wantedCtx) {
+        if (wantedCtx == null || wantedCtx.size() != 1) {
+            return null;
+        }
+        TermId only = wantedCtx.iterator().next();
+        return TermId.ZERO.equals(only) ? null : only;
     }
 
     private @Nullable Set<TermId> wantedContexts(Resource[] ctxs) {
