@@ -24,6 +24,7 @@ import com.dolthub.prolly.HeapBufferPool;
 import com.dolthub.prolly.InMemoryNodeStore;
 import com.dolthub.prolly.Node;
 import com.dolthub.prolly.NodeStore;
+import com.earasoft.prolly.gc.ChunkSet;
 import com.earasoft.prolly.rdf4j.sail.CommitLog;
 import com.earasoft.prolly.rdf4j.sail.ProllySail;
 import com.earasoft.prolly.rdf4j.sail.RefsStore;
@@ -113,10 +114,12 @@ class SyncAuthGraphFilterProperty {
             RootMetaTree rmt = RootMetaTree.readFrom(store, head).orElseThrow();
 
             long gContext = firstCspoLeafContext(store, rmt);
-            Set<String> full = ChunkReachability.from(store, head, Set.of());
-            Set<String> authOnly = ChunkGraphFilter.authOnlyLeaves(store, head, Set.of(gContext));
+            Set<String> full = ChunkReachability.from(store, head, ChunkSet.EMPTY).toHexSet();
+            Set<String> authOnly =
+                    ChunkGraphFilter.authOnlyLeaves(store, head, Set.of(gContext)).toHexSet();
             Set<String> filtered =
-                    ChunkGraphFilter.chunksReachableExcludingGraphs(store, head, Set.of(gContext));
+                    ChunkGraphFilter.chunksReachableExcludingGraphs(store, head, Set.of(gContext))
+                            .toHexSet();
 
             // (1) the drop direction fires — a repo entirely in G has at least one auth-only CSPO
             // leaf.
@@ -150,7 +153,8 @@ class SyncAuthGraphFilterProperty {
             // (5) no-over-filter: excluding a context that appears in no row drops nothing.
             Set<String> absent =
                     ChunkGraphFilter.chunksReachableExcludingGraphs(
-                            store, head, Set.of(gContext + 1_000_000L));
+                                    store, head, Set.of(gContext + 1_000_000L))
+                            .toHexSet();
             assertEquals(full, absent, "excluding an absent context must drop nothing");
         } finally {
             if (sail != null) {

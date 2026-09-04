@@ -24,6 +24,7 @@ import com.dolthub.prolly.HashUtils;
 import com.dolthub.prolly.HeapBufferPool;
 import com.dolthub.prolly.InMemoryNodeStore;
 import com.dolthub.prolly.NodeStore;
+import com.earasoft.prolly.gc.ChunkSet;
 import com.earasoft.prolly.rdf4j.sail.CommitLog;
 import com.earasoft.prolly.rdf4j.sail.ProllySail;
 import com.earasoft.prolly.rdf4j.sail.RefsStore;
@@ -156,7 +157,8 @@ class AuthGraphChunkIdentifierTest {
 
         NodeStore nodeStore = sail.store();
         Set<String> reachable =
-                ChunkReachability.from(nodeStore, sail.currentCommitHash(), Set.of());
+                ChunkReachability.from(nodeStore, sail.currentCommitHash(), ChunkSet.EMPTY)
+                        .toHexSet();
 
         // At minimum: the commit itself (RootMetaTree) + one leaf per
         // each named root (dict, spoc, posc, ospc, cspo). With 2 rows
@@ -224,11 +226,12 @@ class AuthGraphChunkIdentifierTest {
         int chunksBefore =
                 (emptyHead == null)
                         ? 0
-                        : ChunkReachability.from(sail.store(), emptyHead, Set.of()).size();
+                        : ChunkReachability.from(sail.store(), emptyHead, ChunkSet.EMPTY).size();
 
         seedTwoTriples(sail);
         int chunksAfter =
-                ChunkReachability.from(sail.store(), sail.currentCommitHash(), Set.of()).size();
+                ChunkReachability.from(sail.store(), sail.currentCommitHash(), ChunkSet.EMPTY)
+                        .size();
 
         // 2 new rows must materialize some chunks (commit + dict + at
         // least one index leaf). They MUST share leaves between the

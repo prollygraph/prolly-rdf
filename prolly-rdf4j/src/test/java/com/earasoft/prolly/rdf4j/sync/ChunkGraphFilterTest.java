@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.dolthub.prolly.HeapBufferPool;
 import com.dolthub.prolly.InMemoryNodeStore;
 import com.dolthub.prolly.NodeStore;
+import com.earasoft.prolly.gc.ChunkSet;
 import com.earasoft.prolly.rdf4j.sail.CommitLog;
 import com.earasoft.prolly.rdf4j.sail.ProllySail;
 import com.earasoft.prolly.rdf4j.sail.RefsStore;
@@ -65,9 +66,9 @@ class ChunkGraphFilterTest {
         }
         NodeStore store = sail.store();
         byte[] head = sail.currentCommitHash();
-        Set<String> full = ChunkReachability.from(store, head, Set.of());
+        Set<String> full = ChunkReachability.from(store, head, ChunkSet.EMPTY).toHexSet();
         Set<String> filtered =
-                ChunkGraphFilter.chunksReachableExcludingGraphs(store, head, Set.of());
+                ChunkGraphFilter.chunksReachableExcludingGraphs(store, head, Set.of()).toHexSet();
         assertEquals(full, filtered, "empty excluded-graph set MUST equal the full reachability");
     }
 
@@ -81,10 +82,13 @@ class ChunkGraphFilterTest {
             conn.add(vf.createIRI("urn:s"), vf.createIRI("urn:p"), vf.createIRI("urn:o"));
             conn.commit();
         }
-        Set<String> full = ChunkReachability.from(sail.store(), sail.currentCommitHash(), Set.of());
+        Set<String> full =
+                ChunkReachability.from(sail.store(), sail.currentCommitHash(), ChunkSet.EMPTY)
+                        .toHexSet();
         Set<String> filtered =
                 ChunkGraphFilter.chunksReachableExcludingGraphs(
-                        sail.store(), sail.currentCommitHash(), null);
+                                sail.store(), sail.currentCommitHash(), null)
+                        .toHexSet();
         assertEquals(full, filtered, "null excluded-set MUST behave as empty");
     }
 
@@ -101,10 +105,15 @@ class ChunkGraphFilterTest {
             conn.add(vf.createIRI("urn:s"), vf.createIRI("urn:p"), vf.createIRI("urn:o"));
             conn.commit();
         }
-        Set<String> full = ChunkReachability.from(sail.store(), sail.currentCommitHash(), Set.of());
+        Set<String> full =
+                ChunkReachability.from(sail.store(), sail.currentCommitHash(), ChunkSet.EMPTY)
+                        .toHexSet();
         Set<String> filtered =
                 ChunkGraphFilter.chunksReachableExcludingGraphs(
-                        sail.store(), sail.currentCommitHash(), Set.of(0xDEADBEEFL, 0xCAFEBABEL));
+                                sail.store(),
+                                sail.currentCommitHash(),
+                                Set.of(0xDEADBEEFL, 0xCAFEBABEL))
+                        .toHexSet();
         assertEquals(full, filtered, "TermIds matching no rows MUST drop nothing");
     }
 
@@ -117,7 +126,8 @@ class ChunkGraphFilterTest {
         byte[] bogusCommit = new byte[20]; // all zeros — definitely not in store
         Set<String> filtered =
                 ChunkGraphFilter.chunksReachableExcludingGraphs(
-                        sail.store(), bogusCommit, Set.of(1L, 2L));
+                                sail.store(), bogusCommit, Set.of(1L, 2L))
+                        .toHexSet();
         assertTrue(filtered.isEmpty(), "absent commit yields empty set");
     }
 }

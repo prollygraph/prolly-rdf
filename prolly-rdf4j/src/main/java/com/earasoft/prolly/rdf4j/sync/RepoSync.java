@@ -16,6 +16,7 @@
 package com.earasoft.prolly.rdf4j.sync;
 
 import com.dolthub.prolly.NodeStore;
+import com.earasoft.prolly.gc.ChunkSet;
 import com.earasoft.prolly.rdf4j.sail.CommitGraph;
 import com.earasoft.prolly.rdf4j.sail.CommitLog;
 import com.earasoft.prolly.rdf4j.sail.MergeEngine;
@@ -28,7 +29,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.jspecify.annotations.Nullable;
 
@@ -154,7 +154,7 @@ public final class RepoSync {
             throw new IllegalStateException(
                     "fetch incomplete: the head RootMetaTree was not delivered");
         }
-        ChunkReachability.from(store, wantTree, Set.of()); // throws on any missing chunk
+        ChunkReachability.from(store, wantTree, ChunkSet.EMPTY); // throws on any missing chunk
 
         refs.put(trackingRef(remoteName, branch), want);
         return want;

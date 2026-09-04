@@ -25,6 +25,7 @@ import com.dolthub.prolly.TupleDescriptor;
 import com.dolthub.prolly.Type;
 import com.earasoft.prolly.Database;
 import com.earasoft.prolly.GarbageCollector;
+import com.earasoft.prolly.gc.ChunkSet;
 import com.earasoft.prolly.pool.DirectBufferPool;
 import com.earasoft.prolly.rdf4j.sail.CommitLog;
 import com.earasoft.prolly.rdf4j.sail.ProllySail;
@@ -34,7 +35,6 @@ import com.earasoft.prolly.storage.RocksNodeStore;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Set;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
@@ -110,7 +110,7 @@ class SailGcReachabilityTest {
             //    on any missing chunk, so this is the strongest whole-history assertion.
             for (CommitLog.Entry e : entries) {
                 assertDoesNotThrow(
-                        () -> ChunkReachability.from(store, e.metaTreeHash(), Set.of()),
+                        () -> ChunkReachability.from(store, e.metaTreeHash(), ChunkSet.EMPTY),
                         "commit " + e.message() + "'s full closure must survive collection");
                 assertTrue(
                         store.read(e.id()).isPresent(),

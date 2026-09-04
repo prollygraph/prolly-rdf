@@ -15,14 +15,13 @@
  */
 package com.earasoft.prolly.rdf4j.sync;
 
-import com.dolthub.prolly.HashUtils;
 import com.dolthub.prolly.NodeStore;
+import com.earasoft.prolly.gc.ChunkSet;
 import com.earasoft.prolly.gc.GcReachabilityContributor;
+import com.earasoft.prolly.gc.PackedChunkSet;
 import com.earasoft.prolly.rdf4j.sail.CommitLog;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * The RDF face's {@link GcReachabilityContributor} (ADR-0074): the Sail keeps its refs in its own
@@ -54,12 +53,12 @@ public final class SailGcReachability implements GcReachabilityContributor {
     }
 
     @Override
-    public Set<String> reachableHexes(NodeStore store) {
-        Set<String> out = new HashSet<>();
+    public ChunkSet reachable(NodeStore store) {
+        ChunkSet out = new PackedChunkSet();
         try {
             for (CommitLog.Entry entry : commitLog.entries()) {
                 // The commit object itself is a chunk at the commit id (ADR-0073).
-                out.add(HashUtils.toHex(entry.id()));
+                out.add(entry.id());
                 // The RootMetaTree + everything under every root it names. Passing the
                 // already-claimed set as the exclusion prunes shared subtrees across commits
                 // (structural sharing makes this near-incremental per entry).

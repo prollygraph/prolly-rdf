@@ -15,13 +15,12 @@
  */
 package com.earasoft.prolly.rdf4j.sync;
 
-import com.dolthub.prolly.HashUtils;
 import com.dolthub.prolly.NodeStore;
+import com.earasoft.prolly.gc.ChunkSet;
+import com.earasoft.prolly.gc.PackedChunkSet;
 import com.earasoft.prolly.rdf4j.sail.RootMetaTree;
 import com.earasoft.prolly.sync.DataTreeReachability;
-import java.util.HashSet;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * The RootMetaTree-aware Merkle reachability walk shared across the sync layer — given a commit
@@ -45,10 +44,9 @@ public final class ChunkReachability {
      * @throws IllegalStateException if a chunk the tree <em>references</em> is absent — i.e. the
      *     store is torn or a fetch was incomplete
      */
-    public static Set<String> from(NodeStore store, byte[] commitHash, Set<String> excluded) {
-        Set<String> out = new HashSet<>();
-        String commitHex = HashUtils.toHex(commitHash);
-        if (excluded.contains(commitHex)) {
+    public static ChunkSet from(NodeStore store, byte[] commitHash, ChunkSet excluded) {
+        ChunkSet out = new PackedChunkSet();
+        if (excluded.contains(commitHash)) {
             return out;
         }
         // readFrom returns empty for an absent root AND for a commit-id root (ADR-0073: commits are
@@ -58,7 +56,7 @@ public final class ChunkReachability {
         if (rmt.isEmpty()) {
             return out; // a commit this store does not hold — contributes nothing
         }
-        out.add(commitHex);
+        out.add(commitHash);
         for (byte[] tableRoot : rmt.get().entries().values()) {
             DataTreeReachability.collectInto(store, tableRoot, out, excluded);
         }

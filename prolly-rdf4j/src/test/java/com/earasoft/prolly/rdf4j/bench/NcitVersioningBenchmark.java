@@ -314,7 +314,7 @@ public final class NcitVersioningBenchmark {
         if (root.isEmpty()) return Set.of();
         ReachabilityWalker w = new ReachabilityWalker(store);
         w.walk(root.get());
-        return new HashSet<>(w.getReachableHashes());
+        return new HashSet<>(w.getReachableHashes().toHexSet());
     }
 
     /** Group statements by subject, preserving first-seen order. */

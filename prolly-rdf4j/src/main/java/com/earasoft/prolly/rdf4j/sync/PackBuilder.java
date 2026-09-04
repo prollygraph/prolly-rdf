@@ -17,6 +17,8 @@ package com.earasoft.prolly.rdf4j.sync;
 
 import com.dolthub.prolly.HashUtils;
 import com.dolthub.prolly.NodeStore;
+import com.earasoft.prolly.gc.ChunkSet;
+import com.earasoft.prolly.gc.PackedChunkSet;
 import com.earasoft.prolly.rdf4j.sail.CommitLog;
 import com.earasoft.prolly.sync.SyncCommitEntry;
 import com.earasoft.prolly.sync.SyncPack;
@@ -25,7 +27,6 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -87,9 +88,9 @@ public final class PackBuilder {
                 (excludedContextTermIds == null) ? Set.of() : excludedContextTermIds;
 
         // Everything the other side already has — and its subtrees — is pruned.
-        Set<String> excluded = new HashSet<>();
+        ChunkSet excluded = new PackedChunkSet();
         for (byte[] h : haveOrEmpty) {
-            excluded.addAll(ChunkReachability.from(store, h, Set.of()));
+            excluded.addAll(ChunkReachability.from(store, h, ChunkSet.EMPTY));
         }
 
         // The commits in the delta. Every commit's RootMetaTree closure must
@@ -100,7 +101,7 @@ public final class PackBuilder {
         // {@code want} alone would leave the receiver with phantom history.
         List<CommitLog.Entry> commits = CommitClosure.reachable(log, want, haveOrEmpty);
 
-        Set<String> packHexes = new HashSet<>();
+        ChunkSet packChunks = new PackedChunkSet();
         for (CommitLog.Entry e : commits) {
             // ADR-0073 Phase 3: the commit's own content-addressed chunk travels in the pack, so
             // the
@@ -110,24 +111,24 @@ public final class PackBuilder {
             // still
             // reconstructs it from the fat log row it also receives.
             if (store.read(e.id()).isPresent()) {
-                packHexes.add(HashUtils.toHex(e.id()));
+                packChunks.add(e.id());
             }
-            Set<String> prune = unionForCommit(store, e.metaTreeHash(), excluded, filterTermIds);
-            packHexes.addAll(ChunkReachability.from(store, e.metaTreeHash(), prune));
+            ChunkSet prune = unionForCommit(store, e.metaTreeHash(), excluded, filterTermIds);
+            packChunks.addAll(ChunkReachability.from(store, e.metaTreeHash(), prune));
         }
         // Fall through for the want-already-have case: no delta commits, no
         // delta chunks (we may still hand back a non-empty commits list if
         // the receiver explicitly asked for the head it lacks — but
         // CommitClosure handles that already).
         if (commits.isEmpty()) {
-            Set<String> prune = unionForCommit(store, want, excluded, filterTermIds);
-            packHexes.addAll(ChunkReachability.from(store, want, prune));
+            ChunkSet prune = unionForCommit(store, want, excluded, filterTermIds);
+            packChunks.addAll(ChunkReachability.from(store, want, prune));
         }
 
-        List<byte[]> chunks = new ArrayList<>(packHexes.size());
-        for (String hex : packHexes) {
-            chunks.add(readChunk(store, HashUtils.fromHex(hex)));
-        }
+        List<byte[]> chunks = new ArrayList<>(packChunks.size());
+        // Byte-keyed now, so the pack is read straight from the hashes — the fromHex per chunk
+        // that stood here existed only because the set held hex.
+        packChunks.forEach(h -> chunks.add(readChunk(store, h)));
         // The one adapter seam of extract-prolly-sync-module D-1: the sail-owned
         // CommitLog.Entry maps field-for-field onto the sync-owned wire entry.
         List<SyncCommitEntry> wireEntries = new ArrayList<>(commits.size());
@@ -149,12 +150,13 @@ public final class PackBuilder {
      * (CSPO-only per the filter scope). Returns the existing {@code haveExcluded} set as-is when
      * {@code filterTermIds} is empty — zero-cost for the legacy code path.
      */
-    private static Set<String> unionForCommit(
-            NodeStore store, byte[] commitHash, Set<String> haveExcluded, Set<Long> filterTermIds) {
+    private static ChunkSet unionForCommit(
+            NodeStore store, byte[] commitHash, ChunkSet haveExcluded, Set<Long> filterTermIds) {
         if (filterTermIds.isEmpty()) return haveExcluded;
-        Set<String> authOnly = ChunkGraphFilter.authOnlyLeaves(store, commitHash, filterTermIds);
+        ChunkSet authOnly = ChunkGraphFilter.authOnlyLeaves(store, commitHash, filterTermIds);
         if (authOnly.isEmpty()) return haveExcluded;
-        Set<String> union = new HashSet<>(haveExcluded);
+        ChunkSet union = new PackedChunkSet(haveExcluded.size() + authOnly.size());
+        union.addAll(haveExcluded);
         union.addAll(authOnly);
         return union;
     }

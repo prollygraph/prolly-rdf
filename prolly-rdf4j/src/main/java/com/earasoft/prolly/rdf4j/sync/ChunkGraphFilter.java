@@ -15,13 +15,13 @@
  */
 package com.earasoft.prolly.rdf4j.sync;
 
-import com.dolthub.prolly.HashUtils;
 import com.dolthub.prolly.Node;
 import com.dolthub.prolly.NodeStore;
+import com.earasoft.prolly.gc.ChunkSet;
+import com.earasoft.prolly.gc.PackedChunkSet;
 import com.earasoft.prolly.rdf4j.sail.RootMetaTree;
 import com.earasoft.prolly.rdf4j.term.Layouts;
 import java.lang.foreign.MemorySegment;
-import java.util.HashSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -79,9 +79,9 @@ public final class ChunkGraphFilter {
      * <p>This is the load-bearing primitive — callers compose the returned set into their own prune
      * set (e.g. {@link PackBuilder} unions it with the receiver's already-has set before walking).
      */
-    public static Set<String> authOnlyLeaves(
+    public static ChunkSet authOnlyLeaves(
             NodeStore store, byte[] commitHash, Set<Long> excludedContextTermIds) {
-        Set<String> out = new HashSet<>();
+        ChunkSet out = new PackedChunkSet();
         if (excludedContextTermIds == null || excludedContextTermIds.isEmpty()) {
             return out;
         }
@@ -100,11 +100,11 @@ public final class ChunkGraphFilter {
      * every row's context column is in {@code excludedContextTermIds}.
      *
      * <p>Returns the full reachable set when {@code excludedContextTermIds} is empty — equivalent
-     * to {@link ChunkReachability#from(NodeStore, byte[], Set)}.
+     * to {@link ChunkReachability#from(NodeStore, byte[], ChunkSet)}.
      */
-    public static Set<String> chunksReachableExcludingGraphs(
+    public static ChunkSet chunksReachableExcludingGraphs(
             NodeStore store, byte[] commitHash, Set<Long> excludedContextTermIds) {
-        Set<String> authOnly = authOnlyLeaves(store, commitHash, excludedContextTermIds);
+        ChunkSet authOnly = authOnlyLeaves(store, commitHash, excludedContextTermIds);
         return ChunkReachability.from(store, commitHash, authOnly);
     }
 
@@ -115,7 +115,7 @@ public final class ChunkGraphFilter {
      * leaf-granular.
      */
     private static void collectAuthOnlyLeavesCspo(
-            NodeStore store, byte[] nodeHash, Set<Long> excludedContextTermIds, Set<String> out) {
+            NodeStore store, byte[] nodeHash, Set<Long> excludedContextTermIds, ChunkSet out) {
         MemorySegment seg = store.read(nodeHash).orElse(null);
         if (seg == null) return;
         Node node = Objects.requireNonNull(Node.fromBytes(seg));
@@ -133,7 +133,7 @@ public final class ChunkGraphFilter {
         // (c_termid, s_termid, p_termid, o_termid). Column 0 lives
         // at byte 0 of the 42-byte SpocKey tuple wire layout.
         if (isLeafEntirelyInExcludedContexts(node, excludedContextTermIds)) {
-            out.add(HashUtils.toHex(nodeHash));
+            out.add(nodeHash);
         }
     }
 

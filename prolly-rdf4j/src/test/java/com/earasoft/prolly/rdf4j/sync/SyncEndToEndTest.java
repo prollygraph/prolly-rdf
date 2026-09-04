@@ -21,13 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.dolthub.prolly.HeapBufferPool;
 import com.dolthub.prolly.InMemoryNodeStore;
+import com.earasoft.prolly.gc.ChunkSet;
 import com.earasoft.prolly.rdf4j.sail.CommitLog;
 import com.earasoft.prolly.rdf4j.sail.ProllySail;
 import com.earasoft.prolly.rdf4j.sail.RefsStore;
 import com.earasoft.prolly.rdf4j.sail.RootMetaTreeStore;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Set;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
@@ -87,8 +87,8 @@ class SyncEndToEndTest {
         assertArrayEquals(idA, origin.refsStore().orElseThrow().get("main").orElseThrow());
         // Chunk convergence — origin holds exactly A's reachable chunk set (walked by tree hash).
         assertEquals(
-                ChunkReachability.from(a.store(), treeA, Set.of()),
-                ChunkReachability.from(origin.store(), treeA, Set.of()),
+                ChunkReachability.from(a.store(), treeA, ChunkSet.EMPTY).toHexSet(),
+                ChunkReachability.from(origin.store(), treeA, ChunkSet.EMPTY).toHexSet(),
                 "origin's chunk store converged on A's");
 
         // A fresh repo pulls from origin and ends up with the same data + chunks.
@@ -96,8 +96,8 @@ class SyncEndToEndTest {
         new RepoSync(b).pull(new InProcessRemoteRepository(origin), "origin", "main");
         assertEquals(2, size(b), "B converged on A's data via origin");
         assertEquals(
-                ChunkReachability.from(a.store(), treeA, Set.of()),
-                ChunkReachability.from(b.store(), treeA, Set.of()),
+                ChunkReachability.from(a.store(), treeA, ChunkSet.EMPTY).toHexSet(),
+                ChunkReachability.from(b.store(), treeA, ChunkSet.EMPTY).toHexSet(),
                 "B's chunk store holds A's full head tree");
     }
 

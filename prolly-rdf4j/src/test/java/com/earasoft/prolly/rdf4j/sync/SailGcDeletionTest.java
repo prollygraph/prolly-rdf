@@ -248,8 +248,7 @@ class SailGcDeletionTest {
                                                 } catch (InterruptedException e) {
                                                     Thread.currentThread().interrupt();
                                                 }
-                                                return new SailGcReachability(log)
-                                                        .reachableHexes(s);
+                                                return new SailGcReachability(log).reachable(s);
                                             });
                                 } catch (Throwable t) {
                                     gcFailure.set(t);
